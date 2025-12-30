@@ -1182,6 +1182,7 @@
       }, FOLLOW_REFRESH_CONCURRENCY);
 
       const validUpdates = updates.filter((entry): entry is RefreshUpdateEntry => !!entry && !!entry.updated && typeof entry.updated.id !== 'undefined');
+      console.log('[FollowsList] Refresh updates:', updates, validUpdates);
       const orderingResult = buildPostRefreshOrdering(validUpdates) || null;
       if (orderingResult) {
         followStore.updateListOrder(orderingResult.nextListOrder);

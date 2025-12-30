@@ -1,7 +1,7 @@
 <template>
   <div class="douyin-home">
     <div class="douyin-content">
-      <div class="left-panel">
+      <div class="left-panel" v-if="categoriesData.length">
         <CommonCategory 
           :categoriesData="categoriesData"
           @category-selected="onCategorySelected" 

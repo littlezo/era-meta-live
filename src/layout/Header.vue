@@ -115,10 +115,10 @@ import { useThemeStore } from '../stores/theme';
 import { useRoute } from 'vue-router';
 import { Sun, Moon } from 'lucide-vue-next';
 import WindowsWindowControls from '../components/window-controls/WindowsWindowControls.vue';
-import douyuLogo from '../assets/douyu.webp';
+// import douyuLogo from '../assets/douyu.webp';
 import douyinLogo from '../assets/douyin.webp';
-import huyaLogo from '../assets/huya.webp';
-import bilibiliLogo from '../assets/bilibili.webp';
+// import huyaLogo from '../assets/huya.webp';
+// import bilibiliLogo from '../assets/bilibili.webp';
 
 interface DouyinApiStreamInfo {
   title?: string | null;
@@ -237,10 +237,10 @@ const currentPlatform = computed<Platform>(() => {
 });
 
 const platformItems = [
-  { key: 'douyu', path: '/', logo: douyuLogo },
-  { key: 'douyin', path: '/douyin', logo: douyinLogo },
-  { key: 'huya', path: '/huya', logo: huyaLogo },
-  { key: 'bilibili', path: '/bilibili', logo: bilibiliLogo },
+ // { key: 'douyu', path: '/douyin', logo: douyuLogo },
+  { key: 'douyin', path: '/', logo: douyinLogo },
+ // { key: 'huya', path: '/huya', logo: huyaLogo },
+ // { key: 'bilibili', path: '/bilibili', logo: bilibiliLogo },
 ];
 
 const platformsRef = ref<HTMLElement | null>(null);

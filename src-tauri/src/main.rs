@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
-use tauri::Manager;
 mod platforms;
 mod proxy;
 use platforms::common::{DouyinDanmakuState, FollowHttpClient, HuyaDanmakuState};
@@ -23,6 +22,16 @@ use platforms::douyu::{fetch_live_list, fetch_live_list_for_cate3};
 use platforms::huya::stop_huya_danmaku_listener;
 use platforms::huya::{fetch_huya_live_list, start_huya_danmaku_listener};
 // use platforms::huya::get_huya_stream_url_with_quality; // removed in favor of unified cmd
+
+use tauri::Manager;
+
+// 设置默认语言为中文
+fn set_default_language() {
+    // 仅在未设置 LANG 环境变量时设置默认值
+    if env::var("LANG").is_err() {
+        env::set_var("LANG", "zh_CN.UTF-8");
+    }
+}
 
 #[derive(Default, Clone)]
 pub struct StreamUrlStore {
@@ -147,19 +156,37 @@ async fn search_anchor(keyword: String) -> Result<String, String> {
 
 // Main function corrected
 fn main() {
+    // 设置默认语言
+    set_default_language();
     // Create a new HTTP client instance to be managed by Tauri
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+        // .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         .no_proxy()
         .build()
         .expect("Failed to create reqwest client");
     let follow_http_client = FollowHttpClient::new().expect("Failed to create follow http client");
+
+    // 创建菜单的代码将在 setup 函数中处理，因为需要 app 实例
 
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // 获取主窗口
+            let _window = app.get_webview_window("main").unwrap();
+            
+            // 暂时不实现菜单功能，因为Tauri 2.x的菜单API变更较大
+            // 后续可以根据官方文档重新实现菜单功能
+            
+            // 开发者工具说明
+            println!("开发者工具可以通过键盘快捷键访问：");
+            println!("Windows/Linux: Ctrl+Shift+I");
+            println!("macOS: Cmd+Shift+I");
+            
+            println!("应用启动成功！");
+            println!("开发者工具快捷键：Ctrl+Shift+I (Windows/Linux) 或 Cmd+Shift+I (macOS)");
+            
             // Apply macOS vibrancy to the main window when running on macOS
             #[cfg(target_os = "macos")]
             {

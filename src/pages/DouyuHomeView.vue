@@ -72,7 +72,7 @@ interface SelectedCategoryInfo {
 }
 
 const selectedCategoryInfo = ref<SelectedCategoryInfo | null>(null);
-const categorySectionRef = ref<HTMLElement | null>(null)
+// const categorySectionRef = ref<HTMLElement | null>(null)
 const isLoadingDefaultCategory = ref(true);
 
 const handleCategorySelected = (event: CategorySelectedEvent) => {

@@ -12,12 +12,12 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
-      path: '/',
+      path: '/douyu',
       name: 'DouyuHome',
       component: DouyuHomeView
     },
     {
-      path: '/douyin',
+      path: '/',
       name: 'DouyinHome',
       component: DouyinHomeView
     },

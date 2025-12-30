@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DTV",
+  "productName": "Era Meta Live",
   "version": "2.4.1",
-  "identifier": "com.dtv.app",
+  "identifier": "com.era.meta.live",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:2896",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "pnpm run dev",
+    "devUrl": "http://127.0.0.1:2896",
+    "beforeBuildCommand": "pnpm run build",
     "frontendDist": "../dist"
   },
   "app": {
