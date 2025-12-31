@@ -16,6 +16,7 @@
     "core:window:allow-unmaximize",
     "core:window:allow-close",
     "core:webview:allow-create-webview-window",
-    "os:default"
+    "os:default",
+    "notification:default"
   ]
 }

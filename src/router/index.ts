@@ -7,10 +7,16 @@ import HuyaHomeView from '../pages/HuyaHomeView.vue'
 import HuyaPlayerView from '../pages/HuyaPlayerView.vue'
 import BilibiliHomeView from '../pages/BilibiliHomeView.vue'
 import BilibiliPlayerView from '../pages/BilibiliPlayerView.vue'
+import SettingsView from '../pages/SettingsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/settings',
+      name: 'Settings',
+      component: SettingsView
+    },
     {
       path: '/douyu',
       name: 'DouyuHome',

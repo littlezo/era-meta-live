@@ -88,6 +88,15 @@
         </svg>
       </button>
       <button
+        @click="goToSettings"
+        class="settings-btn"
+        :class="{ 'settings-btn--windows': shouldShowWindowsControls }"
+        title="偏好设置"
+        data-tauri-drag-region="none"
+      >
+        <Settings class="settings-icon" :size="20" />
+      </button>
+      <button
         @click="toggleTheme"
         class="theme-btn"
         :class="{ 'theme-btn--windows': shouldShowWindowsControls }"
@@ -112,8 +121,8 @@ import { platform as detectPlatform } from '@tauri-apps/plugin-os';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Platform } from '../platforms/common/types';
 import { useThemeStore } from '../stores/theme';
-import { useRoute } from 'vue-router';
-import { Sun, Moon } from 'lucide-vue-next';
+import { useRoute, useRouter } from 'vue-router';
+import { Sun, Moon, Settings } from 'lucide-vue-next';
 import WindowsWindowControls from '../components/window-controls/WindowsWindowControls.vue';
 // import douyuLogo from '../assets/douyu.webp';
 import douyinLogo from '../assets/douyin.webp';
@@ -161,6 +170,7 @@ const emit = defineEmits(['selectAnchor']);
 
 const themeStore = useThemeStore();
 const route = useRoute();
+const router = useRouter();
 
 // Proxy support for Bilibili avatar images in search results
 const proxyBase = ref<string | null>(null);
@@ -343,6 +353,11 @@ const openGithub = async () => {
     }
     console.error('[Header] Failed to open GitHub', error);
   }
+};
+
+const goToSettings = () => {
+  console.log('[Header] Navigating to settings');
+  router.push('/settings');
 };
 
 onBeforeUnmount(() => {});
@@ -778,6 +793,7 @@ const tryEnterRoom = (roomId: string) => {
 }
 
 .header-actions--windows .theme-btn,
+.header-actions--windows .settings-btn,
 .header-actions--windows .github-btn {
   width: 34px;
   height: 34px;
@@ -904,12 +920,49 @@ const tryEnterRoom = (roomId: string) => {
 .github-btn svg {
   width: 20px;
   height: 20px;
+  pointer-events: none;
 }
 
+.theme-icon {
+  pointer-events: none;
+}
+
+.settings-btn {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  color: var(--secondary-text);
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: none;
+}
+
+.settings-btn:hover {
+  background: var(--hover-bg);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+  transform: rotate(45deg) scale(1.1);
+}
+
+.settings-btn:active {
+  transform: rotate(45deg) scale(0.95);
+}
+
+.settings-icon {
+  pointer-events: none;
+}
 
 :root[data-theme="dark"] .platforms-wrapper,
 :root[data-theme="dark"] .search-box,
 :root[data-theme="dark"] .theme-btn,
+:root[data-theme="dark"] .settings-btn,
 :root[data-theme="dark"] .github-btn {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.16);
@@ -918,6 +971,7 @@ const tryEnterRoom = (roomId: string) => {
 :root[data-theme="light"] .platforms-wrapper,
 :root[data-theme="light"] .search-box,
 :root[data-theme="light"] .theme-btn,
+:root[data-theme="light"] .settings-btn,
 :root[data-theme="light"] .github-btn {
   background: rgba(255, 255, 255, 0.92);
   border-color: transparent;

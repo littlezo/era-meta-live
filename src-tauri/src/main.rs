@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 mod platforms;
 mod proxy;
+mod watch;
 use platforms::common::{DouyinDanmakuState, FollowHttpClient, HuyaDanmakuState};
 use platforms::douyin::danmu::signature::generate_douyin_ms_token;
 use platforms::douyin::fetch_douyin_partition_rooms;
@@ -169,6 +170,7 @@ fn main() {
     // 创建菜单的代码将在 setup 函数中处理，因为需要 app 实例
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -209,6 +211,7 @@ fn main() {
         .manage(StreamUrlStore::default())
         .manage(proxy::ProxyServerHandle::default())
         .manage(platforms::bilibili::state::BilibiliState::default())
+        .manage(watch::FollowWatchState::default())
         .invoke_handler(tauri::generate_handler![
             get_stream_url_cmd,
             get_stream_url_with_quality_cmd,
@@ -246,6 +249,9 @@ fn main() {
             platforms::bilibili::cookie::bootstrap_bilibili_cookie,
             platforms::bilibili::search::search_bilibili_rooms,
             platforms::huya::search::search_huya_anchors,
+            watch::start_follow_watch_service,
+            watch::stop_follow_watch_service,
+            watch::send_test_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

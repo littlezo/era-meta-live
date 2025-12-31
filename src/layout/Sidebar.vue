@@ -17,7 +17,7 @@
     </div>
   </aside>
 </template>
-
+ 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import type { FollowedStreamer } from '../platforms/common/types';
@@ -267,4 +267,3 @@ html[data-theme="light"] .nav-item.is-active .nav-icon {
   border-radius: 10px;
 }
 </style>
-```

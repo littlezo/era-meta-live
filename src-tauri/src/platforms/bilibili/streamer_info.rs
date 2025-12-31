@@ -25,7 +25,7 @@ fn get_mixin_key(origin: &str) -> String {
     out.chars().take(32).collect()
 }
 
-async fn get_wbi_keys(
+pub async fn get_wbi_keys(
     client: &reqwest::Client,
     headers: &HeaderMap,
 ) -> Result<(String, String), String> {
@@ -71,7 +71,7 @@ fn sanitize_value(value: &str) -> String {
     value.chars().filter(|c| !banned.contains(c)).collect()
 }
 
-fn build_wbi_sign(room_id: &str, img_key: &str, sub_key: &str) -> (String, String) {
+pub fn build_wbi_sign(room_id: &str, img_key: &str, sub_key: &str) -> (String, String) {
     let mixin_key = get_mixin_key(&format!("{}{}", img_key, sub_key));
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
