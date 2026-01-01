@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use tauri::{command, AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex};
 
-use crate::platforms::common::FollowHttpClient;
+use platforms::common::FollowHttpClient;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -101,15 +101,15 @@ pub async fn start_follow_watch_service(
 
                 match platform {
                     PlatformKind::Douyin => {
-                        let normalized_id = crate::platforms::douyin::web_api::normalize_douyin_live_id(&id);
-                        match crate::platforms::douyin::web_api::fetch_room_data(&http_client, &normalized_id, None).await {
+                        let normalized_id = platforms::douyin::web_api::normalize_douyin_live_id(&id);
+                        match platforms::douyin::web_api::fetch_room_data(&http_client, &normalized_id, None).await {
                             Ok(room_data) => {
                                 let room = room_data.room;
                                 let status_num = room.get("status").and_then(|v| v.as_i64()).unwrap_or_default();
                                 live_status = if status_num == 2 { "LIVE".to_string() } else { "OFFLINE".to_string() };
                                 nickname = room.get("anchor_name").and_then(|v| v.as_str()).map(|s| s.to_string()).or(nickname);
                                 room_title = room.get("title").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                avatar_url = crate::platforms::douyin::douyin_streamer_detail::extract_avatar(&room);
+                                avatar_url = platforms::douyin::douyin_streamer_detail::extract_avatar(&room);
                             }
                             Err(_) => {
                                 live_status = "UNKNOWN".to_string();
@@ -167,9 +167,9 @@ pub async fn start_follow_watch_service(
                         headers.insert(REFERER, HeaderValue::from_static("https://live.bilibili.com/"));
                         let client = &http_client.inner;
                         // get wbi keys
-                        let keys = crate::platforms::bilibili::streamer_info::get_wbi_keys(client, &headers).await;
+                        let keys = platforms::bilibili::streamer_info::get_wbi_keys(client, &headers).await;
                         if let Ok((img_key, sub_key)) = keys {
-                            let (wts, w_rid) = crate::platforms::bilibili::streamer_info::build_wbi_sign(&id, &img_key, &sub_key);
+                            let (wts, w_rid) = platforms::bilibili::streamer_info::build_wbi_sign(&id, &img_key, &sub_key);
                             let base = "https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom";
                             let params = vec![("room_id", id.clone()), ("wts", wts), ("w_rid", w_rid)];
                             if let Ok(resp) = client.get(base).headers(headers.clone()).query(&params).send().await {
@@ -208,12 +208,7 @@ pub async fn start_follow_watch_service(
 
                 // notification on LIVE transition
                 if cfg.enable_notification {
-                    let key = match platform {
-                        PlatformKind::Douyu => format!("douyu:{}", id),
-                        PlatformKind::Douyin => format!("douyin:{}", id),
-                        PlatformKind::Bilibili => format!("bilibili:{}", id),
-                        PlatformKind::Huya => format!("huya:{}", id),
-                    };
+                    let key = key_of(s);
                     let mut map = status_map.lock().await;
                     let prev = map.get(&key).cloned().unwrap_or_default();
                     if prev != "LIVE" && live_status == "LIVE" {

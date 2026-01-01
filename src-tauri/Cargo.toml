@@ -1,3 +1,10 @@
+[workspace]
+resolver = "3"
+members = [".", "platforms"]
+
+[workspace.dependencies]
+platforms = { path = "platforms" }
+
 [package]
 name = "era-meta-live"
 version = "2.4.1"
@@ -68,10 +75,19 @@ tungstenite = { version = "0.21", features = ["native-tls"] }
  brotlic = "0.8"
  cookie = "0.18"
  html-escape = "0.2"
+platforms = { path = "platforms" }
+
+ [profile.dev]
+ opt-level = 0          # 无优化
+ debug = true           # 开启调试信息
+ overflow-checks = true # 整数溢出检查
+ incremental = true     # 启用增量编译
 
  [profile.release]
- panic = "abort"
- codegen-units = 1
- lto = true
- opt-level = "z"
- strip = true
+ panic = "abort"    # 崩溃时直接终止
+ codegen-units = 1  # 一个接一个地编译包，这样编译器就可以更好地优化
+ lto = true         # 启用链接到优化
+ opt-level = 3      # 最大优化
+ strip = true       # 删除调试符号
+ debug = false      # 关闭调试信息
+ incremental = true # 启用增量编译

@@ -1,4 +1,4 @@
-use ::cookie::Cookie;
+use cookie::Cookie;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::time::Duration;

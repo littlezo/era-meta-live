@@ -1,6 +1,6 @@
-use crate::platforms::common::http_client::HttpClient;
-use crate::platforms::common::{FollowHttpClient, GetStreamUrlPayload, LiveStreamInfo};
-use crate::platforms::douyin::web_api::{fetch_room_data, normalize_douyin_live_id, DouyinRoomData};
+use crate::common::http_client::HttpClient;
+use crate::common::{FollowHttpClient, GetStreamUrlPayload, LiveStreamInfo};
+use crate::douyin::web_api::{fetch_room_data, normalize_douyin_live_id, DouyinRoomData};
 use tauri::command;
 use tauri::State;
 

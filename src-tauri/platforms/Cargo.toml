@@ -1,0 +1,40 @@
+[package]
+name = "platforms"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.148"
+tokio = { version = "1.48.0", features = ["full"] }
+futures-util = "0.3"
+reqwest = { version = "0.11", features = ["json", "stream", "cookies", "brotli", "gzip", "blocking"] }
+tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
+url = "2.5"
+regex = "1.12.2"
+md-5 = "0.10.6"
+base64 = "0.21"
+hex = "0.4"
+percent-encoding = "2.3"
+serde_urlencoded = "0.7"
+thiserror = "1.0"
+anyhow = "1.0"
+once_cell = "1.21"
+lazy_static = "1.5.0"
+prost = "0.12"
+prost-types = "0.12"
+tars-stream = "0.1.1"
+tungstenite = { version = "0.21", features = ["native-tls"] }
+log = "0.4"
+native-tls = "0.2"
+openssl-sys = { version = "0.9", features = ["vendored"] }
+flate2 = "1.1"
+urlencoding = "2.1.3"
+rand = "0.8"
+tauri = { version = "2.9.5", features = ["macos-private-api", "devtools"] }
+cookie = "0.18"
+brotlic = "0.8"
+chrono = "0.4"
+deno_core = "0.288.0"
+html-escape = "0.2"
+specta = { version = "2.0.0-rc.22", features = ["serde", "derive", "function"] }

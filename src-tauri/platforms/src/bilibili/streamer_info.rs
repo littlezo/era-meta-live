@@ -1,4 +1,4 @@
-use crate::platforms::common::FollowHttpClient;
+use crate::common::FollowHttpClient;
 use md5;
 use md5::{Digest, Md5};
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, REFERER, USER_AGENT};
@@ -101,13 +101,13 @@ pub fn build_wbi_sign(room_id: &str, img_key: &str, sub_key: &str) -> (String, S
 
 #[command]
 pub async fn fetch_bilibili_streamer_info(
-    payload: crate::platforms::common::GetStreamUrlPayload,
+    payload: crate::common::GetStreamUrlPayload,
     cookie: Option<String>,
     follow_http: State<'_, FollowHttpClient>,
-) -> Result<crate::platforms::common::LiveStreamInfo, String> {
+) -> Result<crate::common::LiveStreamInfo, String> {
     let room_id = payload.args.room_id_str.clone();
     if room_id.trim().is_empty() {
-        return Ok(crate::platforms::common::LiveStreamInfo {
+        return Ok(crate::common::LiveStreamInfo {
             title: None,
             anchor_name: None,
             avatar: None,
@@ -162,7 +162,7 @@ pub async fn fetch_bilibili_streamer_info(
         .await
         .map_err(|e| format!("Read text failed: {}", e))?;
     if !status.is_success() {
-        return Ok(crate::platforms::common::LiveStreamInfo {
+        return Ok(crate::common::LiveStreamInfo {
             title: None,
             anchor_name: None,
             avatar: None,
@@ -187,7 +187,7 @@ pub async fn fetch_bilibili_streamer_info(
     let avatar = base_info["face"].as_str().map(|s| s.to_string());
     let live_status = room_info["live_status"].as_i64().unwrap_or(0) as i32;
 
-    Ok(crate::platforms::common::LiveStreamInfo {
+    Ok(crate::common::LiveStreamInfo {
         title,
         anchor_name,
         avatar,

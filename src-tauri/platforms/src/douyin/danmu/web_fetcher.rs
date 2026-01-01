@@ -1,5 +1,5 @@
-use crate::platforms::common::http_client::HttpClient;
-use crate::platforms::douyin::web_api::{
+use crate::common::http_client::HttpClient;
+use crate::douyin::web_api::{
     fetch_room_data, normalize_douyin_live_id, DouyinRoomData, DEFAULT_USER_AGENT,
 };
 use serde::{Deserialize, Serialize};
@@ -406,9 +406,9 @@ pub async fn fetch_douyin_room_info(live_id: String) -> Result<DouyinFollowListR
         .await
         .map_err(|e| format!("Failed to fetch Douyin room data: {}", e))?;
 
-    let web_rid = crate::platforms::douyin::douyin_streamer_detail::extract_web_rid(&room)
+    let web_rid = crate::douyin::douyin_streamer_detail::extract_web_rid(&room)
         .unwrap_or_else(|| normalized_id.clone());
-    let nickname = crate::platforms::douyin::douyin_streamer_detail::extract_anchor_name(&room)
+    let nickname = crate::douyin::douyin_streamer_detail::extract_anchor_name(&room)
         .unwrap_or_else(|| format!("主播{}", web_rid));
     let room_name = room
         .get("title")
@@ -416,7 +416,7 @@ pub async fn fetch_douyin_room_info(live_id: String) -> Result<DouyinFollowListR
         .unwrap_or("")
         .to_string();
     let avatar_url =
-        crate::platforms::douyin::douyin_streamer_detail::extract_avatar(&room).unwrap_or_default();
+        crate::douyin::douyin_streamer_detail::extract_avatar(&room).unwrap_or_default();
     let status = room
         .get("status")
         .and_then(|v| v.as_i64())

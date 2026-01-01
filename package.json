@@ -3,6 +3,7 @@
   "private": true,
   "version": "2.4.1",
   "type": "module",
+  "packageManager": "pnpm@10.27.0",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
@@ -16,6 +17,7 @@
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.2",
     "@tauri-apps/plugin-os": "^2.3.2",
+    "@tauri-apps/plugin-sql": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.9.0",
     "@vueuse/core": "^14.1.0",
     "danmu.js": "1.1.13-douyin-1.5",
@@ -26,7 +28,7 @@
     "uuid": "^13.0.0",
     "vue": "^3.5.26",
     "vue-router": "^4.6.4",
-    "vue-virtual-scroller": "^2.0.0-beta.8",
+    "vue-virtual-scroller": "2.0.0-beta.8",
     "xgplayer": "^3.0.23",
     "xgplayer-flv": "^3.0.23",
     "xgplayer-hls.js": "^3.0.23"
@@ -37,7 +39,7 @@
     "@types/video.js": "^7.3.58",
     "@vitejs/plugin-vue": "^6.0.3",
     "typescript": "~5.9.3",
-    "vite": "^8.0.0-beta.5",
+    "vite": "8.0.0-beta.5",
     "vue-tsc": "^3.2.1"
   },
   "volta": {

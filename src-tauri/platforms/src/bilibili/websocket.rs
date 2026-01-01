@@ -23,7 +23,7 @@ pub fn is_debug_enabled() -> bool {
 
 macro_rules! ws_debug {
     ($($arg:tt)*) => {
-        if crate::platforms::bilibili::websocket::is_debug_enabled() {
+        if crate::bilibili::websocket::is_debug_enabled() {
             println!($($arg)*);
         }
     }

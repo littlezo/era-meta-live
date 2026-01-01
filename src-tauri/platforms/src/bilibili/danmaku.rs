@@ -3,15 +3,15 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::mpsc as tokio_mpsc;
 
-use crate::platforms::bilibili::models::BiliMessage;
-use crate::platforms::bilibili::websocket::BiliLiveClient;
+use crate::bilibili::models::BiliMessage;
+use crate::bilibili::websocket::BiliLiveClient;
 
 #[tauri::command]
 pub async fn start_bilibili_danmaku_listener(
-    payload: crate::platforms::common::GetStreamUrlPayload,
+    payload: crate::common::GetStreamUrlPayload,
     cookie: Option<String>,
     app_handle: tauri::AppHandle,
-    state: tauri::State<'_, crate::platforms::common::BilibiliDanmakuState>,
+    state: tauri::State<'_, crate::common::BilibiliDanmakuState>,
 ) -> Result<(), String> {
     let room_id = payload.args.room_id_str.clone();
 
@@ -57,7 +57,7 @@ pub async fn start_bilibili_danmaku_listener(
                     BiliMessage::Danmu { user, text } => {
                         let _ = app_handle_clone.emit(
                             "danmaku-message",
-                            crate::platforms::common::DanmakuFrontendPayload {
+                            crate::common::DanmakuFrontendPayload {
                                 room_id: room_id_clone.clone(),
                                 user,
                                 content: text,
@@ -69,7 +69,7 @@ pub async fn start_bilibili_danmaku_listener(
                     BiliMessage::Gift { user, gift } => {
                         let _ = app_handle_clone.emit(
                             "danmaku-message",
-                            crate::platforms::common::DanmakuFrontendPayload {
+                            crate::common::DanmakuFrontendPayload {
                                 room_id: room_id_clone.clone(),
                                 user,
                                 content: format!("[礼物] {}", gift),
@@ -99,7 +99,7 @@ pub async fn start_bilibili_danmaku_listener(
 
 #[tauri::command]
 pub async fn stop_bilibili_danmaku_listener(
-    state: tauri::State<'_, crate::platforms::common::BilibiliDanmakuState>,
+    state: tauri::State<'_, crate::common::BilibiliDanmakuState>,
 ) -> Result<(), String> {
     let previous_tx = {
         let mut lock = state.inner().0.lock().unwrap();

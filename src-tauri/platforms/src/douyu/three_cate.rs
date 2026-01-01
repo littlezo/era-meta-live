@@ -1,4 +1,4 @@
-use crate::platforms::common::types_rust::{CommonPlatformCategoryRust, SupportedPlatformRust};
+use crate::common::types_rust::{CommonPlatformCategoryRust, SupportedPlatformRust};
 use log::{error, info};
 use serde::Deserialize;
 

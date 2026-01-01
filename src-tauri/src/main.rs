@@ -6,22 +6,13 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
-mod platforms;
+use platforms;
+
+// Import the platform commands wrapper module
+mod platform_commands;
 mod proxy;
 mod watch;
 use platforms::common::{DouyinDanmakuState, FollowHttpClient, HuyaDanmakuState};
-use platforms::douyin::danmu::signature::generate_douyin_ms_token;
-use platforms::douyin::fetch_douyin_partition_rooms;
-use platforms::douyin::fetch_douyin_room_info;
-use platforms::douyin::fetch_douyin_streamer_info;
-use platforms::douyin::start_douyin_danmu_listener;
-use platforms::douyin::{get_douyin_live_stream_url, get_douyin_live_stream_url_with_quality};
-use platforms::douyu::fetch_categories;
-use platforms::douyu::fetch_douyu_room_info;
-use platforms::douyu::fetch_three_cate;
-use platforms::douyu::{fetch_live_list, fetch_live_list_for_cate3};
-use platforms::huya::stop_huya_danmaku_listener;
-use platforms::huya::{fetch_huya_live_list, start_huya_danmaku_listener};
 // use platforms::huya::get_huya_stream_url_with_quality; // removed in favor of unified cmd
 
 use tauri::Manager;
@@ -213,42 +204,27 @@ fn main() {
         .manage(platforms::bilibili::state::BilibiliState::default())
         .manage(watch::FollowWatchState::default())
         .invoke_handler(tauri::generate_handler![
+            // Douyu legacy commands
             get_stream_url_cmd,
             get_stream_url_with_quality_cmd,
             set_stream_url_cmd,
             search_anchor,
             start_danmaku_listener,      // Douyu danmaku start
             stop_danmaku_listener,       // Douyu danmaku stop
-            start_douyin_danmu_listener, // Added Douyin danmaku listener command
-            start_huya_danmaku_listener, // Added Huya danmaku listener command
-            stop_huya_danmaku_listener,  // Added Huya danmaku stop command
-            platforms::bilibili::danmaku::start_bilibili_danmaku_listener,
-            platforms::bilibili::danmaku::stop_bilibili_danmaku_listener,
+            
+            // Platform commands (wrapped from platforms crate)
+            // Only include commands that are actually used by the frontend
+            // Douyin commands - these are the ones causing errors in the frontend
+            platform_commands::fetch_douyin_streamer_info,
+            platform_commands::get_douyin_live_stream_url_with_quality,
+            platform_commands::start_douyin_danmu_listener,
+            
+            // Proxy commands
             proxy::start_proxy,
             proxy::stop_proxy,
             proxy::start_static_proxy_server,
-            fetch_categories,
-            fetch_live_list,
-            fetch_live_list_for_cate3,
-            fetch_douyu_room_info,
-            fetch_three_cate,
-            generate_douyin_ms_token,
-            fetch_douyin_partition_rooms,
-            get_douyin_live_stream_url,
-            get_douyin_live_stream_url_with_quality,
-            fetch_douyin_room_info,
-            fetch_douyin_streamer_info,
-            fetch_huya_live_list,
-            platforms::huya::danmaku::fetch_huya_join_params,
-            platforms::huya::stream_url::get_huya_unified_cmd,
-            platforms::bilibili::state::generate_bilibili_w_webid,
-            platforms::bilibili::live_list::fetch_bilibili_live_list,
-            platforms::bilibili::stream_url::get_bilibili_live_stream_url_with_quality,
-            platforms::bilibili::streamer_info::fetch_bilibili_streamer_info,
-            platforms::bilibili::cookie::get_bilibili_cookie,
-            platforms::bilibili::cookie::bootstrap_bilibili_cookie,
-            platforms::bilibili::search::search_bilibili_rooms,
-            platforms::huya::search::search_huya_anchors,
+            
+            // Watch service commands
             watch::start_follow_watch_service,
             watch::stop_follow_watch_service,
             watch::send_test_notification,

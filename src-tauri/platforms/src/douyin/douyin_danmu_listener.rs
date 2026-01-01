@@ -1,12 +1,12 @@
-use crate::platforms::douyin::web_api::normalize_douyin_live_id;
+use crate::douyin::web_api::normalize_douyin_live_id;
 use tauri::Emitter;
 use tokio::sync::mpsc as tokio_mpsc;
 
 #[tauri::command]
 pub async fn start_douyin_danmu_listener(
-    payload: crate::platforms::common::GetStreamUrlPayload,
+    payload: crate::common::GetStreamUrlPayload,
     app_handle: tauri::AppHandle,
-    state: tauri::State<'_, crate::platforms::common::DouyinDanmakuState>,
+    state: tauri::State<'_, crate::common::DouyinDanmakuState>,
 ) -> Result<(), String> {
     let room_id_or_url = payload.args.room_id_str;
     println!(
@@ -54,7 +54,7 @@ pub async fn start_douyin_danmu_listener(
             let mut attempt: u32 = 1;
             loop {
                 let attempt_result = async {
-                    let mut fetcher = crate::platforms::douyin::danmu::web_fetcher::DouyinLiveWebFetcher::new(&room_id_str_clone)?;
+                    let mut fetcher = crate::douyin::danmu::web_fetcher::DouyinLiveWebFetcher::new(&room_id_str_clone)?;
                     fetcher
                         .fetch_room_details()
                         .await
@@ -68,7 +68,7 @@ pub async fn start_douyin_danmu_listener(
                         actual_room_id, user_unique_id
                     );
 
-                    let (read_stream, ack_tx) = crate::platforms::douyin::danmu::websocket_connection::connect_and_manage_websocket(
+                    let (read_stream, ack_tx) = crate::douyin::danmu::websocket_connection::connect_and_manage_websocket(
                         &fetcher,
                         &actual_room_id,
                         &cookie_header,
@@ -82,7 +82,7 @@ pub async fn start_douyin_danmu_listener(
                     );
 
                     tokio::select! {
-                        res = crate::platforms::douyin::danmu::message_handler::handle_received_messages(
+                        res = crate::douyin::danmu::message_handler::handle_received_messages(
                             read_stream,
                             ack_tx,
                             app_handle_clone.clone(),
@@ -128,7 +128,7 @@ pub async fn start_douyin_danmu_listener(
                 "[Douyin Danmaku] Listener task for room {} critically failed: {}",
                 room_id_str_clone, e
             );
-            let error_payload = crate::platforms::common::DanmakuFrontendPayload {
+            let error_payload = crate::common::DanmakuFrontendPayload {
                 room_id: room_id_str_clone.clone(),
                 user: "系统消息".to_string(),
                 content: format!("弹幕连接发生错误: {}", e),

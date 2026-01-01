@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Result;
 
 fn main() -> Result<()> {
-    let out_path = "src/platforms/douyin/danmu/gen";
+    let out_path = "platforms/src/douyin/danmu/gen";
 
     // Ensure the output directory exists
     fs::create_dir_all(out_path)?;
@@ -10,8 +10,8 @@ fn main() -> Result<()> {
     prost_build::Config::new()
         .out_dir(out_path) // Specify the output directory within the project
         .compile_protos(
-            &["src/platforms/douyin/danmu/douyin.proto"], // Corrected path
-            &["src/platforms/douyin/danmu/"], // Kept include path, ensure it's correct for any imports in douyin.proto
+            &["platforms/src/douyin/danmu/douyin.proto"], // Updated path after platforms directory move
+            &["platforms/src/douyin/danmu/"], // Updated include path after platforms directory move
         )
         .expect("Failed to compile danmu protos");
 

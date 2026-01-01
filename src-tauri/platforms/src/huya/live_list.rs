@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
-use crate::platforms::common::http_client::HttpClient;
+use crate::common::http_client::HttpClient;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HuyaStreamerFrontend {

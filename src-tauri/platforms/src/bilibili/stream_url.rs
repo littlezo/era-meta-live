@@ -1,23 +1,23 @@
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, REFERER, USER_AGENT};
 use serde_json::Value;
-use tauri::{command, AppHandle, State};
+use tauri::{command, AppHandle};
 
-use crate::platforms::common::types::StreamVariant;
-use crate::proxy::{start_proxy, ProxyServerHandle};
-use crate::StreamUrlStore;
+use crate::common::types::StreamVariant;
+// use crate::proxy::{start_proxy, ProxyServerHandle}; // Proxy is now in main crate
+// use crate::StreamUrlStore; // Use the one from common types instead
 
 #[command]
 pub async fn get_bilibili_live_stream_url_with_quality(
-    app_handle: AppHandle,
-    stream_url_store: State<'_, StreamUrlStore>,
-    proxy_server_handle: State<'_, ProxyServerHandle>,
-    payload: crate::platforms::common::GetStreamUrlPayload,
+    _app_handle: AppHandle,
+    // stream_url_store: State<'_, StreamUrlStore>, // Removed: Now in main crate
+    // proxy_server_handle: State<'_, ProxyServerHandle>, // Removed: Now in main crate
+    payload: crate::common::GetStreamUrlPayload,
     quality: String,
     cookie: Option<String>,
-) -> Result<crate::platforms::common::LiveStreamInfo, String> {
+) -> Result<crate::common::LiveStreamInfo, String> {
     let room_id = payload.args.room_id_str.clone();
     if room_id.trim().is_empty() {
-        return Ok(crate::platforms::common::LiveStreamInfo {
+        return Ok(crate::common::LiveStreamInfo {
             title: None,
             anchor_name: None,
             avatar: None,
@@ -248,7 +248,7 @@ pub async fn get_bilibili_live_stream_url_with_quality(
         .map_err(|e| format!("room_init json failed: {} | {}", e, init_text))?;
     let live_status = init_json["data"]["live_status"].as_i64().unwrap_or(0);
     if live_status != 1 {
-        return Ok(crate::platforms::common::LiveStreamInfo {
+        return Ok(crate::common::LiveStreamInfo {
             title: init_json["data"]["title"].as_str().map(|s| s.to_string()),
             anchor_name: init_json["data"]["uname"].as_str().map(|s| s.to_string()),
             avatar: None,
@@ -471,7 +471,7 @@ pub async fn get_bilibili_live_stream_url_with_quality(
     let selected_stream = match selected_stream {
         Some(stream) => stream,
         None => {
-            return Ok(crate::platforms::common::LiveStreamInfo {
+            return Ok(crate::common::LiveStreamInfo {
                 title: init_json["data"]["title"].as_str().map(|s| s.to_string()),
                 anchor_name: init_json["data"]["uname"].as_str().map(|s| s.to_string()),
                 avatar: None,
@@ -489,31 +489,15 @@ pub async fn get_bilibili_live_stream_url_with_quality(
     match selected_stream {
         SelectedStream::Flv(real_url) => {
             // FLV：写入到 Store 并启动代理
-            let proxied_url = {
-                {
-                    let mut current_url_in_store = stream_url_store.url.lock().unwrap();
-                    *current_url_in_store = real_url.clone();
-                }
-                match start_proxy(app_handle, proxy_server_handle, stream_url_store).await {
-                    Ok(proxy) => Some(proxy),
-                    Err(e) => {
-                        eprintln!("[Bilibili] Failed to start proxy: {}", e);
-                        None
-                    }
-                }
-            };
+            // Removed proxy handling: Now in main crate
+            // Proxy setup is handled by the main application, not by the platforms package
+            let final_error_message = None;
 
-            let final_error_message = if proxied_url.is_none() {
-                Some("代理启动失败".to_string())
-            } else {
-                None
-            };
-
-            Ok(crate::platforms::common::LiveStreamInfo {
+            Ok(crate::common::LiveStreamInfo {
                 title: init_json["data"]["title"].as_str().map(|s| s.to_string()),
                 anchor_name: init_json["data"]["uname"].as_str().map(|s| s.to_string()),
                 avatar: None,
-                stream_url: proxied_url,
+                stream_url: Some(real_url.clone()),
                 status: Some(if final_error_message.is_some() { 2 } else { 1 }),
                 error_message: final_error_message,
                 upstream_url: Some(real_url),
@@ -523,20 +507,11 @@ pub async fn get_bilibili_live_stream_url_with_quality(
             })
         }
         SelectedStream::Hls(real_url) => {
-            // HLS：无需本地代理，若存在旧的 FLV 代理则关闭并清空存储
-            {
-                let handle_to_stop = { proxy_server_handle.0.lock().unwrap().take() };
-                if let Some(handle) = handle_to_stop {
-                    handle.stop(false).await;
-                    eprintln!("[Bilibili] Stopped existing FLV proxy before using HLS stream");
-                }
-            }
-            {
-                let mut current_url_in_store = stream_url_store.url.lock().unwrap();
-                *current_url_in_store = String::new();
-            }
+            // HLS：无需本地代理
+            // Removed proxy cleanup: Now handled by main crate
+            // Old proxy cleanup and URL clearing is handled by the main application
 
-            Ok(crate::platforms::common::LiveStreamInfo {
+            Ok(crate::common::LiveStreamInfo {
                 title: init_json["data"]["title"].as_str().map(|s| s.to_string()),
                 anchor_name: init_json["data"]["uname"].as_str().map(|s| s.to_string()),
                 avatar: None,

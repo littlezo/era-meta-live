@@ -1,6 +1,6 @@
-use crate::platforms::common::http_client::HttpClient;
-use crate::platforms::douyin::a_bogus::generate_a_bogus;
-use crate::platforms::douyin::web_api::DEFAULT_USER_AGENT;
+use crate::common::http_client::HttpClient;
+use crate::douyin::a_bogus::generate_a_bogus;
+use crate::douyin::web_api::DEFAULT_USER_AGENT;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use tauri::State; // Removed SET_COOKIE

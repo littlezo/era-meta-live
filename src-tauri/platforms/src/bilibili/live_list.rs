@@ -1,7 +1,7 @@
 use md5::{Digest, Md5};
 
 // 引入 generate_bilibili_w_webid 以便在缺失时后端自动初始化
-use crate::platforms::bilibili::state::{generate_bilibili_w_webid, BilibiliState};
+use crate::bilibili::state::{generate_bilibili_w_webid, BilibiliState};
 
 #[tauri::command]
 pub async fn fetch_bilibili_live_list(

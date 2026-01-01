@@ -6,9 +6,9 @@ use tauri::Emitter;
 use tokio::sync::mpsc::Sender;
 use tokio_tungstenite::tungstenite::protocol::Message as WsMessage; // Import the Emitter trait for app_handle.emit()
 
-use crate::platforms::douyin::danmu::gen::{PushFrame, Response}; // Removed ::douyin
-use crate::platforms::douyin::danmu::message_parsers;
-use crate::platforms::douyin::danmu::websocket_connection::WsStream; // Corrected path // Corrected path
+use crate::douyin::danmu::gen::{PushFrame, Response}; // Removed ::douyin
+use crate::douyin::danmu::message_parsers;
+use crate::douyin::danmu::websocket_connection::WsStream; // Corrected path // Corrected path
 
 // This function will handle the message receiving loop and parsing
 pub async fn handle_received_messages(

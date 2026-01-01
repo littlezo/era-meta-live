@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::State;
 
-use crate::platforms::common::FollowHttpClient;
+use crate::common::FollowHttpClient;
 
 // Define the structure to be returned to TypeScript
 #[derive(Serialize, Deserialize, Debug, Default)]

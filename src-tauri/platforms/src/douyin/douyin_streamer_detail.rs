@@ -1,14 +1,14 @@
-use crate::platforms::common::http_client::HttpClient;
-use crate::platforms::common::types::StreamVariant;
-use crate::platforms::common::GetStreamUrlPayload;
-use crate::platforms::common::LiveStreamInfo as CommonLiveStreamInfo;
-use crate::platforms::douyin::web_api::{
+use crate::common::http_client::HttpClient;
+use crate::common::types::StreamVariant;
+use crate::common::GetStreamUrlPayload;
+use crate::common::LiveStreamInfo as CommonLiveStreamInfo;
+use crate::douyin::web_api::{
     choose_flv_stream, fetch_room_data, normalize_douyin_live_id, DouyinRoomData,
 };
-use crate::proxy::ProxyServerHandle;
-use crate::StreamUrlStore;
+// use crate::proxy::ProxyServerHandle; // Proxy is now in main crate
+// use crate::StreamUrlStore; // Use the one from common types instead
 use serde_json::Value;
-use tauri::{command, AppHandle, State};
+use tauri::{command, AppHandle};
 
 const QUALITY_OD: &str = "OD";
 const QUALITY_BD: &str = "BD";
@@ -16,27 +16,30 @@ const QUALITY_UHD: &str = "UHD";
 #[command]
 pub async fn get_douyin_live_stream_url(
     app_handle: AppHandle,
-    stream_url_store: State<'_, StreamUrlStore>,
-    proxy_server_handle: State<'_, ProxyServerHandle>,
+    // stream_url_store: State<'_, StreamUrlStore>, // Removed: Now in main crate
+    // proxy_server_handle: State<'_, ProxyServerHandle>, // Removed: Now in main crate
     payload: GetStreamUrlPayload,
+    cookie: Option<String>,
 ) -> Result<CommonLiveStreamInfo, String> {
     get_douyin_live_stream_url_with_quality(
         app_handle,
-        stream_url_store,
-        proxy_server_handle,
+        // stream_url_store, // Removed: Now in main crate
+        // proxy_server_handle, // Removed: Now in main crate
         payload,
         QUALITY_OD.to_string(),
+        cookie,
     )
     .await
 }
 
 #[command]
 pub async fn get_douyin_live_stream_url_with_quality(
-    _app_handle: AppHandle,
-    _stream_url_store: State<'_, StreamUrlStore>,
-    _proxy_server_handle: State<'_, ProxyServerHandle>,
+    _app_handle: AppHandle, // Marked as unused
+    // _stream_url_store: State<'_, StreamUrlStore>, // Removed: Now in main crate
+    // _proxy_server_handle: State<'_, ProxyServerHandle>, // Removed: Now in main crate
     payload: GetStreamUrlPayload,
     quality: String,
+    _cookie: Option<String>, // Marked as unused
 ) -> Result<CommonLiveStreamInfo, String> {
     let requested_id = payload.args.room_id_str.trim().to_string();
     if requested_id.is_empty() {
@@ -179,7 +182,7 @@ fn enforce_https(url: &str) -> String {
     }
 }
 
-pub(crate) fn extract_avatar(room: &Value) -> Option<String> {
+pub fn extract_avatar(room: &Value) -> Option<String> {
     room.get("owner")
         .and_then(|o| o.get("avatar_thumb"))
         .and_then(|thumb| thumb.get("url_list"))

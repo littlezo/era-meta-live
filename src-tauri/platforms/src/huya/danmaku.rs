@@ -92,9 +92,9 @@ pub async fn fetch_huya_join_params(room_id: String) -> Result<HuyaJoinParams, S
 
 #[tauri::command]
 pub async fn start_huya_danmaku_listener(
-    payload: crate::platforms::common::GetStreamUrlPayload,
+    payload: crate::common::GetStreamUrlPayload,
     app_handle: tauri::AppHandle,
-    state: tauri::State<'_, crate::platforms::common::HuyaDanmakuState>,
+    state: tauri::State<'_, crate::common::HuyaDanmakuState>,
 ) -> Result<(), String> {
     let room_id_or_url = payload.args.room_id_str.clone();
     println!(
@@ -142,7 +142,7 @@ pub async fn start_huya_danmaku_listener(
             Err(e) => {
                 let _ = app_handle_clone.emit(
                     "danmaku-message",
-                    crate::platforms::common::DanmakuFrontendPayload {
+                    crate::common::DanmakuFrontendPayload {
                         room_id: room_id_clone.clone(),
                         user: "系统".to_string(),
                         content: format!("Huya房间信息获取失败: {}", e),
@@ -173,7 +173,7 @@ pub async fn start_huya_danmaku_listener(
             Err(e) => {
                 let _ = app_handle_clone.emit(
                     "danmaku-message",
-                    crate::platforms::common::DanmakuFrontendPayload {
+                    crate::common::DanmakuFrontendPayload {
                         room_id: room_id_clone.clone(),
                         user: "系统".to_string(),
                         content: format!("Huya弹幕连接失败: {}", e),
@@ -189,7 +189,7 @@ pub async fn start_huya_danmaku_listener(
         if let Err(e) = ws_write.send(WsMessage::Binary(reg_data)).await {
             let _ = app_handle_clone.emit(
                 "danmaku-message",
-                crate::platforms::common::DanmakuFrontendPayload {
+                crate::common::DanmakuFrontendPayload {
                     room_id: room_id_clone.clone(),
                     user: "系统".to_string(),
                     content: format!("Huya注册数据发送失败: {}", e),
@@ -239,7 +239,7 @@ pub async fn start_huya_danmaku_listener(
                                 info!("[Huya Danmaku] decoded chat: {} -> {}", nick, text);
                                 let _ = app_handle_clone.emit(
                                     "danmaku-message",
-                                    crate::platforms::common::DanmakuFrontendPayload {
+                                    crate::common::DanmakuFrontendPayload {
                                         room_id: room_id_clone.clone(),
                                         user: nick,
                                         content: text,
@@ -290,7 +290,7 @@ pub async fn start_huya_danmaku_listener(
 #[tauri::command]
 pub async fn stop_huya_danmaku_listener(
     room_id: String,
-    state: tauri::State<'_, crate::platforms::common::HuyaDanmakuState>,
+    state: tauri::State<'_, crate::common::HuyaDanmakuState>,
 ) -> Result<(), String> {
     println!(
         "[Huya Danmaku] stop_huya_danmaku_listener called for room_id={}",

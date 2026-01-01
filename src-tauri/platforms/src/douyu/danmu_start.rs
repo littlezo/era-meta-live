@@ -144,7 +144,7 @@ impl DanmakuClient {
                                 // 统一向前端发送通用弹幕事件，便于跨平台 DanmuList 使用
                                 let _ = window.emit(
                                     "danmaku-message",
-                                    crate::platforms::common::DanmakuFrontendPayload {
+                                    crate::common::DanmakuFrontendPayload {
                                         room_id: room_id_clone.clone(),
                                         user: result.get("nn").unwrap_or(&unknown).to_string(),
                                         content: result.get("txt").unwrap_or(&empty).to_string(),

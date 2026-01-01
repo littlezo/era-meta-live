@@ -1,5 +1,5 @@
-use crate::platforms::common::http_client::HttpClient;
-use crate::platforms::douyin::a_bogus::generate_a_bogus;
+use crate::common::http_client::HttpClient;
+use crate::douyin::a_bogus::generate_a_bogus;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT_ENCODING, COOKIE, REFERER, USER_AGENT};
 use serde_json::Value;
 
