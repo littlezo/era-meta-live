@@ -1,14 +1,10 @@
 [package]
-name = "platforms"
+name = "douyin"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bilibili = { path = "./bilibili" }
-douyin = { path = "./douyin" }
-douyu = { path = "./douyu" }
-huya = { path = "./huya" }
-shared = { path = "./shared" }
+shared = { path = "../shared" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.148"
 tokio = { version = "1.48.0", features = ["full"] }
@@ -28,11 +24,9 @@ once_cell = "1.21"
 lazy_static = "1.5.0"
 prost = "0.12"
 prost-types = "0.12"
-tars-stream = "0.1.1"
 tungstenite = { version = "0.21", features = ["native-tls"] }
 log = "0.4"
 native-tls = "0.2"
-openssl-sys = { version = "0.9", features = ["vendored"] }
 flate2 = "1.1"
 urlencoding = "2.1.3"
 rand = "0.8"
@@ -42,4 +36,3 @@ brotlic = "0.8"
 chrono = "0.4"
 deno_core = "0.288.0"
 html-escape = "0.2"
-specta = { version = "2.0.0-rc.22", features = ["serde", "derive", "function"] }

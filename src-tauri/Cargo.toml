@@ -1,9 +1,14 @@
 [workspace]
 resolver = "3"
-members = [".", "platforms"]
+members = [".", "platforms", "platforms/bilibili", "platforms/douyin", "platforms/douyu", "platforms/huya", "platforms/shared"]
 
 [workspace.dependencies]
 platforms = { path = "platforms" }
+bilibili = { path = "platforms/bilibili" }
+douyin = { path = "platforms/douyin" }
+douyu = { path = "platforms/douyu" }
+huya = { path = "platforms/huya" }
+shared = { path = "platforms/shared" }
 
 [package]
 name = "era-meta-live"

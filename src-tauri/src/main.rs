@@ -12,7 +12,7 @@ use platforms;
 mod platform_commands;
 mod proxy;
 mod watch;
-use platforms::common::{DouyinDanmakuState, FollowHttpClient, HuyaDanmakuState};
+use platforms::shared::{DouyinDanmakuState, FollowHttpClient, HuyaDanmakuState};
 // use platforms::huya::get_huya_stream_url_with_quality; // removed in favor of unified cmd
 
 use tauri::Manager;
@@ -198,7 +198,7 @@ fn main() {
         .manage(DouyuDanmakuHandles::default()) // Manage new DouyuDanmakuHandles
         .manage(DouyinDanmakuState::default()) // Manage DouyinDanmakuState
         .manage(HuyaDanmakuState::default()) // Manage HuyaDanmakuState
-        .manage(platforms::common::BilibiliDanmakuState::default()) // Manage BilibiliDanmakuState
+        .manage(platforms::shared::BilibiliDanmakuState::default()) // Manage BilibiliDanmakuState
         .manage(StreamUrlStore::default())
         .manage(proxy::ProxyServerHandle::default())
         .manage(platforms::bilibili::state::BilibiliState::default())

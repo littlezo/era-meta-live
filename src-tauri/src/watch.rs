@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use tauri::{command, AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex};
 
-use platforms::common::FollowHttpClient;
+use platforms::shared::FollowHttpClient;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
