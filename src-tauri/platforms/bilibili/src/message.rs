@@ -7,11 +7,11 @@ use crate::models::BiliMessage;
 use crate::websocket::BiliLiveClient;
 
 #[tauri::command]
-pub async fn start_bilibili_danmaku_listener(
+pub async fn start_bilibili_message_listener(
     payload: shared::GetStreamUrlPayload,
     cookie: Option<String>,
     app_handle: tauri::AppHandle,
-    state: tauri::State<'_, shared::BilibiliDanmakuState>,
+    state: tauri::State<'_, shared::BilibiliMessageState>,
 ) -> Result<(), String> {
     let room_id = payload.args.room_id_str.clone();
 
@@ -22,7 +22,7 @@ pub async fn start_bilibili_danmaku_listener(
     };
     if let Some(tx) = previous_tx {
         if tx.send(()).await.is_err() {
-            eprintln!("[Bilibili Danmaku] 旧任务关闭失败，可能已退出。");
+            eprintln!("[Bilibili Message] 旧任务关闭失败，可能已退出。");
         }
     }
 
@@ -56,8 +56,8 @@ pub async fn start_bilibili_danmaku_listener(
                 match msg {
                     BiliMessage::Danmu { user, text } => {
                         let _ = app_handle_clone.emit(
-                            "danmaku-message",
-                            shared::DanmakuFrontendPayload {
+                            "message",
+                            shared::MessageFrontendPayload {
                                 room_id: room_id_clone.clone(),
                                 user,
                                 content: text,
@@ -68,8 +68,8 @@ pub async fn start_bilibili_danmaku_listener(
                     }
                     BiliMessage::Gift { user, gift } => {
                         let _ = app_handle_clone.emit(
-                            "danmaku-message",
-                            shared::DanmakuFrontendPayload {
+                            "message",
+                            shared::MessageFrontendPayload {
                                 room_id: room_id_clone.clone(),
                                 user,
                                 content: format!("[礼物] {}", gift),
@@ -98,8 +98,8 @@ pub async fn start_bilibili_danmaku_listener(
 }
 
 #[tauri::command]
-pub async fn stop_bilibili_danmaku_listener(
-    state: tauri::State<'_, shared::BilibiliDanmakuState>,
+pub async fn stop_bilibili_message_listener(
+    state: tauri::State<'_, shared::BilibiliMessageState>,
 ) -> Result<(), String> {
     let previous_tx = {
         let mut lock = state.inner().0.lock().unwrap();
@@ -108,7 +108,7 @@ pub async fn stop_bilibili_danmaku_listener(
     if let Some(tx) = previous_tx {
         match tx.send(()).await {
             Ok(()) => Ok(()),
-            Err(_) => Err("停止Bilibili弹幕监听失败：接收方已关闭".to_string()),
+            Err(_) => Err("停止Bilibili消息监听失败：接收方已关闭".to_string()),
         }
     } else {
         Ok(())

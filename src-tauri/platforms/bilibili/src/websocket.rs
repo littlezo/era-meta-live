@@ -9,7 +9,7 @@ use tungstenite::{client, Message, WebSocket};
 use url::Url;
 
 use super::auth::{init_server_no_cookie, init_server_with_cookie};
-use super::models::{BiliMessage, DanmuServer, MsgHead};
+use super::models::{BiliMessage, MessageServer, MsgHead};
 
 static DEBUG_FLAG: OnceLock<bool> = OnceLock::new();
 
@@ -264,13 +264,13 @@ impl BiliLiveClient {
     }
 }
 
-pub fn gen_damu_list(list: &serde_json::Value) -> Vec<DanmuServer> {
-    let mut res: Vec<DanmuServer> = Vec::new();
+pub fn gen_message_server_list(list: &serde_json::Value) -> Vec<MessageServer> {
+    let mut res: Vec<MessageServer> = Vec::new();
     if let Some(server_list) = list.as_array() {
         ws_debug!("[websocket] host_list size={}", server_list.len());
         if server_list.is_empty() {
             ws_debug!("[websocket] host_list empty, using default server");
-            res.push(DanmuServer::default());
+            res.push(MessageServer::default());
         } else {
             for s in server_list {
                 let host = s["host"]
@@ -286,7 +286,7 @@ pub fn gen_damu_list(list: &serde_json::Value) -> Vec<DanmuServer> {
                     wss_port,
                     ws_port
                 );
-                res.push(DanmuServer {
+                res.push(MessageServer {
                     host: host.to_string(),
                     port,
                     wss_port,
@@ -296,12 +296,12 @@ pub fn gen_damu_list(list: &serde_json::Value) -> Vec<DanmuServer> {
         }
     } else {
         ws_debug!("[websocket] host_list not an array, using default server");
-        res.push(DanmuServer::default());
+        res.push(MessageServer::default());
     }
     res
 }
 
-fn find_server(vd: Vec<DanmuServer>) -> (String, String, String) {
+fn find_server(vd: Vec<MessageServer>) -> (String, String, String) {
     let (host, wss_port) = (vd.get(0).unwrap().host.clone(), vd.get(0).unwrap().wss_port);
     ws_debug!(
         "[websocket] choose server host={} wss_port={}",
@@ -316,8 +316,8 @@ fn find_server(vd: Vec<DanmuServer>) -> (String, String, String) {
 }
 
 pub fn connect(v: Value) -> WebSocket<TlsStream<TcpStream>> {
-    let danmu_server = gen_damu_list(&v);
-    let (host, url, ws_url) = find_server(danmu_server);
+    let message_server = gen_message_server_list(&v);
+    let (host, url, ws_url) = find_server(message_server);
     ws_debug!("[websocket] connecting tcp {} and ws {}", url, ws_url);
     let connector: native_tls::TlsConnector = native_tls::TlsConnector::new().unwrap();
     let stream: TcpStream = TcpStream::connect(url).unwrap();

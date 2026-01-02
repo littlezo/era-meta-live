@@ -39,7 +39,7 @@ export interface FollowedStreamer extends BaseStreamer {
 export interface StreamRoomDetails extends LiveStreamer {
   // Add more detailed fields if needed when inside a room
   streamUrl?: string; // If fetched
-  danmakuServerInfo?: any; // Platform-specific danmaku details
+  messageServerInfo?: any; // Platform-specific message details
 }
 
 // Common Streamer Details for UI components
@@ -60,7 +60,7 @@ export interface StreamerDetails {
   // Add any other fields commonly used by UI components
 }
 
-export interface CommonDanmakuMessage {
+export interface CommonMessage {
   id?: string; // Optional unique ID for the message for keying in lists
   platform: SupportedPlatform;
   type: 'chat' | 'gift' | 'system' | 'enter' | 'other'; // General categories
@@ -72,9 +72,9 @@ export interface CommonDanmakuMessage {
     badgeLevel?: number;   // Fan badge level
     // Add other sender details if common across platforms
   };
-  content: string; // The main text of the danmaku
+  content: string; // The main text of the message
   timestamp?: number; // Optional: when the message was sent/received
-  color?: string; // Danmaku text color, if specified
+  color?: string; // Message text color, if specified
   // Platform-specific raw data can be included if needed for advanced use cases
   rawData?: any; 
 }

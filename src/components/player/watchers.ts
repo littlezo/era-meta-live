@@ -1,10 +1,10 @@
 import { watch, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 
-import { sanitizeDanmuArea, sanitizeDanmuOpacity } from './constants';
-import type { DanmuUserSettings } from './constants';
-import type { DanmuSettingsControl, DanmuToggleControl, LineControl, QualityControl, RefreshControl, LineOption } from './plugins';
+import { sanitizeMessageArea, sanitizeMessageOpacity } from './constants';
+import type { MessageUserSettings } from './constants';
+import type { MessageSettingsControl, MessageToggleControl, LineControl, QualityControl, RefreshControl, LineOption } from './plugins';
 import { Platform as StreamingPlatform } from '../../platforms/common/types';
-import type { DanmakuMessage, DanmuOverlayInstance } from './types';
+import type { Message, MessageOverlayInstance } from './types';
 
 export interface PlayerProps {
   roomId: string | null;
@@ -32,24 +32,24 @@ export interface PlayerWatcherContext {
   persistLinePreference: (platform?: StreamingPlatform | null, lineKey?: string | null) => void;
   props: PlayerProps;
   resolveStoredLine: (platform?: StreamingPlatform | null) => string | null;
-  isDanmuEnabled: Ref<boolean>;
-  danmuTogglePlugin: ShallowRef<DanmuToggleControl | null>;
-  danmuInstance: ShallowRef<DanmuOverlayInstance | null>;
-  danmuSettingsPlugin: ShallowRef<DanmuSettingsControl | null>;
-  danmuSettings: DanmuUserSettings;
-  applyDanmuOverlayPreferences: (
-    instance: DanmuOverlayInstance | null,
-    settings: DanmuUserSettings,
+  isMessageEnabled: Ref<boolean>;
+  messageTogglePlugin: ShallowRef<MessageToggleControl | null>;
+  messageInstance: ShallowRef<MessageOverlayInstance | null>;
+  messageSettingsPlugin: ShallowRef<MessageSettingsControl | null>;
+  messageSettings: MessageUserSettings;
+  applyMessageOverlayPreferences: (
+    instance: MessageOverlayInstance | null,
+    settings: MessageUserSettings,
     isEnabled: boolean,
     playerRoot?: HTMLElement | null,
   ) => void;
-  syncDanmuEnabledState: (
-    instance: DanmuOverlayInstance | null,
-    settings: DanmuUserSettings,
+  syncMessageEnabledState: (
+    instance: MessageOverlayInstance | null,
+    settings: MessageUserSettings,
     isEnabled: boolean,
     playerRoot?: HTMLElement | null,
   ) => void;
-  persistCurrentDanmuPreferences: () => void;
+  persistCurrentMessagePreferences: () => void;
   currentQuality: Ref<string>;
   initializeQualityPreference: () => void;
   initializePlayerAndStream: (
@@ -60,11 +60,11 @@ export interface PlayerWatcherContext {
     oldRoomIdForCleanup?: string | null,
     oldPlatformForCleanup?: StreamingPlatform | null,
   ) => Promise<void>;
-  stopCurrentDanmakuListener: (platform?: StreamingPlatform, roomId?: string | null | undefined) => Promise<void>;
+  stopCurrentMessageListener: (platform?: StreamingPlatform) => Promise<void>;
   stopDouyuProxy: () => Promise<void>;
   destroyPlayerInstance: () => void;
   isLoadingStream: Ref<boolean>;
-  danmakuMessages: Ref<DanmakuMessage[]>;
+  messageMessages: Ref<Message[]>;
   streamError: Ref<string | null>;
   isOfflineError: Ref<boolean>;
   playerTitle: Ref<string | null | undefined>;
@@ -88,22 +88,22 @@ export const registerPlayerWatchers = (ctx: PlayerWatcherContext) => {
     persistLinePreference,
     props,
     resolveStoredLine,
-    isDanmuEnabled,
-    danmuTogglePlugin,
-    danmuInstance,
-    danmuSettingsPlugin,
-    danmuSettings,
-    applyDanmuOverlayPreferences,
-    syncDanmuEnabledState,
-    persistCurrentDanmuPreferences,
+    isMessageEnabled,
+    messageTogglePlugin,
+    messageInstance,
+    messageSettingsPlugin,
+    messageSettings,
+    applyMessageOverlayPreferences,
+    syncMessageEnabledState,
+    persistCurrentMessagePreferences,
     currentQuality,
     initializeQualityPreference,
     initializePlayerAndStream,
-    stopCurrentDanmakuListener,
+    stopCurrentMessageListener,
     stopDouyuProxy,
     destroyPlayerInstance,
     isLoadingStream,
-    danmakuMessages,
+    messageMessages,
     streamError,
     isOfflineError,
     playerTitle,
@@ -173,79 +173,79 @@ export const registerPlayerWatchers = (ctx: PlayerWatcherContext) => {
     lineControlPlugin.value?.updateLabel(getLineLabel(line));
   });
 
-  watch(isDanmuEnabled, (enabled) => {
-    danmuTogglePlugin.value?.setState(enabled);
-    syncDanmuEnabledState(danmuInstance.value, danmuSettings, enabled, playerRoot());
-    persistCurrentDanmuPreferences();
+  watch(isMessageEnabled, (enabled) => {
+    messageTogglePlugin.value?.setState(enabled);
+    syncMessageEnabledState(messageInstance.value, messageSettings, enabled, playerRoot());
+    persistCurrentMessagePreferences();
   });
 
-  watch(danmuTogglePlugin, (plugin) => {
-    plugin?.setState(isDanmuEnabled.value);
+  watch(messageTogglePlugin, (plugin) => {
+    plugin?.setState(isMessageEnabled.value);
   });
 
-  watch(danmuSettingsPlugin, (plugin) => {
+  watch(messageSettingsPlugin, (plugin) => {
     if (!plugin) {
       return;
     }
     plugin.setSettings({
-      color: danmuSettings.color,
-      strokeColor: danmuSettings.strokeColor,
-      fontSize: danmuSettings.fontSize,
-      duration: danmuSettings.duration,
-      area: sanitizeDanmuArea(danmuSettings.area),
-      mode: danmuSettings.mode,
-      opacity: sanitizeDanmuOpacity(danmuSettings.opacity),
+      color: messageSettings.color,
+      strokeColor: messageSettings.strokeColor,
+      fontSize: messageSettings.fontSize,
+      duration: messageSettings.duration,
+      area: sanitizeMessageArea(messageSettings.area),
+      mode: messageSettings.mode,
+      opacity: sanitizeMessageOpacity(messageSettings.opacity),
     });
   });
 
-  watch(() => danmuSettings.color, (color) => {
-    danmuSettingsPlugin.value?.setSettings({ color });
-    persistCurrentDanmuPreferences();
+  watch(() => messageSettings.color, (color) => {
+    messageSettingsPlugin.value?.setSettings({ color });
+    persistCurrentMessagePreferences();
   });
 
-  watch(() => danmuSettings.strokeColor, (strokeColor) => {
-    danmuSettingsPlugin.value?.setSettings({ strokeColor });
-    applyDanmuOverlayPreferences(danmuInstance.value, danmuSettings, isDanmuEnabled.value, playerRoot());
-    persistCurrentDanmuPreferences();
+  watch(() => messageSettings.strokeColor, (strokeColor) => {
+    messageSettingsPlugin.value?.setSettings({ strokeColor });
+    applyMessageOverlayPreferences(messageInstance.value, messageSettings, isMessageEnabled.value, playerRoot());
+    persistCurrentMessagePreferences();
   });
 
-  watch(() => danmuSettings.fontSize, (fontSize) => {
-    danmuSettingsPlugin.value?.setSettings({ fontSize });
-    applyDanmuOverlayPreferences(danmuInstance.value, danmuSettings, isDanmuEnabled.value, playerRoot());
-    persistCurrentDanmuPreferences();
+  watch(() => messageSettings.fontSize, (fontSize) => {
+    messageSettingsPlugin.value?.setSettings({ fontSize });
+    applyMessageOverlayPreferences(messageInstance.value, messageSettings, isMessageEnabled.value, playerRoot());
+    persistCurrentMessagePreferences();
   });
 
-  watch(() => danmuSettings.duration, (duration) => {
-    danmuSettingsPlugin.value?.setSettings({ duration });
-    applyDanmuOverlayPreferences(danmuInstance.value, danmuSettings, isDanmuEnabled.value, playerRoot());
-    persistCurrentDanmuPreferences();
+  watch(() => messageSettings.duration, (duration) => {
+    messageSettingsPlugin.value?.setSettings({ duration });
+    applyMessageOverlayPreferences(messageInstance.value, messageSettings, isMessageEnabled.value, playerRoot());
+    persistCurrentMessagePreferences();
   });
 
-  watch(() => danmuSettings.area, (area) => {
-    const normalizedArea = sanitizeDanmuArea(area);
+  watch(() => messageSettings.area, (area) => {
+    const normalizedArea = sanitizeMessageArea(area);
     if (normalizedArea !== area) {
-      danmuSettings.area = normalizedArea;
+      messageSettings.area = normalizedArea;
       return;
     }
-    danmuSettingsPlugin.value?.setSettings({ area: normalizedArea });
-    applyDanmuOverlayPreferences(danmuInstance.value, danmuSettings, isDanmuEnabled.value, playerRoot());
-    persistCurrentDanmuPreferences();
+    messageSettingsPlugin.value?.setSettings({ area: normalizedArea });
+    applyMessageOverlayPreferences(messageInstance.value, messageSettings, isMessageEnabled.value, playerRoot());
+    persistCurrentMessagePreferences();
   });
 
-  watch(() => danmuSettings.opacity, (opacity) => {
-    const normalizedOpacity = sanitizeDanmuOpacity(opacity);
+  watch(() => messageSettings.opacity, (opacity) => {
+    const normalizedOpacity = sanitizeMessageOpacity(opacity);
     if (normalizedOpacity !== opacity) {
-      danmuSettings.opacity = normalizedOpacity;
+      messageSettings.opacity = normalizedOpacity;
       return;
     }
-    danmuSettingsPlugin.value?.setSettings({ opacity: normalizedOpacity });
-    applyDanmuOverlayPreferences(danmuInstance.value, danmuSettings, isDanmuEnabled.value, playerRoot());
-    persistCurrentDanmuPreferences();
+    messageSettingsPlugin.value?.setSettings({ opacity: normalizedOpacity });
+    applyMessageOverlayPreferences(messageInstance.value, messageSettings, isMessageEnabled.value, playerRoot());
+    persistCurrentMessagePreferences();
   });
 
-  watch(danmuInstance, (instance) => {
-    applyDanmuOverlayPreferences(instance, danmuSettings, isDanmuEnabled.value, playerRoot());
-    syncDanmuEnabledState(instance, danmuSettings, isDanmuEnabled.value, playerRoot());
+  watch(messageInstance, (instance) => {
+    applyMessageOverlayPreferences(instance, messageSettings, isMessageEnabled.value, playerRoot());
+    syncMessageEnabledState(instance, messageSettings, isMessageEnabled.value, playerRoot());
   });
 
   watch(currentQuality, (quality) => {
@@ -292,18 +292,18 @@ export const registerPlayerWatchers = (ctx: PlayerWatcherContext) => {
         }
       } else if (!newRoomId) {
         if (oldRoomId && oldPlatform !== null && oldPlatform !== undefined) {
-          await stopCurrentDanmakuListener(oldPlatform, oldRoomId);
+          await stopCurrentMessageListener(oldPlatform);
           if (oldPlatform === StreamingPlatform.DOUYU) {
             await stopDouyuProxy();
           }
         } else {
-          await stopCurrentDanmakuListener();
+          await stopCurrentMessageListener();
         }
 
         destroyPlayerInstance();
 
         isLoadingStream.value = false;
-        danmakuMessages.value = [];
+        messageMessages.value = [];
         streamError.value = null;
         isOfflineError.value = false;
       }

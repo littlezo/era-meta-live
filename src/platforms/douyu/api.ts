@@ -62,15 +62,15 @@ export async function fetchDouyuRoomInfo(roomId: string): Promise<DouyuRoomInfo>
   }
 }
 
-export async function startDouyuDanmakuListener(roomId: string): Promise<void> {
+export async function startDouyuMessageListener(roomId: string): Promise<void> {
   if (!roomId) {
-    console.warn('startDouyuDanmakuListener: roomId is not provided.');
-    return Promise.reject('Room ID is required for Danmaku listener.');
+    console.warn('startDouyuMessageListener: roomId is not provided.');
+    return Promise.reject('Room ID is required for Message listener.');
   }
   try {
-    await invoke<void>('start_danmaku_listener', { roomId });
+    await invoke<void>('start_message_listener', { roomId });
   } catch (error) {
-    console.error(`Error starting Douyu danmaku listener for ${roomId}:`, error);
+    console.error(`Error starting Douyu message listener for ${roomId}:`, error);
     throw error; // Re-throw to be handled by the caller
   }
 }

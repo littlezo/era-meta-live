@@ -4,14 +4,14 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub struct DanmuServer {
+pub struct MessageServer {
     pub host: String,
     pub port: i32,
     pub wss_port: i32,
     pub ws_port: i32,
 }
 
-impl Default for DanmuServer {
+impl Default for MessageServer {
     fn default() -> Self {
         Self {
             host: String::from("broadcastlv.chat.bilibili.com"),

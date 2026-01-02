@@ -144,7 +144,7 @@ pub fn init_uid(headers: HeaderMap) -> (reqwest::StatusCode, String) {
     (stat, body)
 }
 
-/// Query danmaku server host list and token via signed URL, with given headers
+/// Query message server host list and token via signed URL, with given headers
 pub fn init_host_server(headers: HeaderMap, room_id: u64) -> (reqwest::StatusCode, String) {
     let client = reqwest::blocking::Client::builder()
         .https_only(true)

@@ -84,12 +84,12 @@
         </div>
       </div>
 
-      <DanmuList 
+      <MessageList 
         v-if="roomId && !isLoadingStream && !streamError" 
         :room-id="props.roomId"
-        :messages="danmakuMessages"
+        :messages="messageMessages"
         v-show="!isFullScreen" 
-        class="danmu-panel" 
+        class="message-panel" 
         :class="{'hidden-panel': isFullScreen}"
       />
     </div>
@@ -107,29 +107,29 @@ import 'xgplayer/dist/index.min.css';
 import './player.css';
 
 import { Platform as StreamingPlatform } from '../../platforms/common/types';
-import type { DanmakuMessage, DanmuOverlayInstance } from './types';
+import type { Message, MessageOverlayInstance } from './types';
 import {
-  applyDanmuFontFamilyForOS,
+  applyMessageFontFamilyForOS,
   ICONS,
-  loadDanmuPreferences,
+  loadMessagePreferences,
   loadStoredVolume,
-  persistDanmuPreferences,
-  sanitizeDanmuArea,
-  sanitizeDanmuOpacity,
-  type DanmuUserSettings,
+  persistMessagePreferences,
+  sanitizeMessageArea,
+  sanitizeMessageOpacity,
+  type MessageUserSettings,
 } from './constants';
 import {
-  DanmuSettingsControl,
-  DanmuToggleControl,
+  MessageSettingsControl,
+  MessageToggleControl,
   LineControl,
   QualityControl,
   RefreshControl,
   VolumeControl,
 } from './plugins';
 import { arrangeControlClusters } from './controlLayout';
-import { applyDanmuOverlayPreferences, createDanmuOverlay, ensureDanmuOverlayHost, syncDanmuEnabledState } from './danmuOverlay';
+import { applyMessageOverlayPreferences, createMessageOverlay, ensureMessageOverlayHost, syncMessageEnabledState } from './messageOverlay';
 import { registerPlayerWatchers, type PlayerProps } from './watchers';
-import { startCurrentDanmakuListener as startDanmakuListener, stopCurrentDanmakuListener as stopDanmakuListener } from './danmakuManager';
+import { startCurrentMessageListener as startMessageListener, stopCurrentMessageListener as stopMessageListener } from './messageManager';
 import { getLineLabel, getLineOptionsForPlatform, persistLinePreference, resolveCurrentLineFor, resolveStoredLine } from './lineOptions';
 
 // Platform-specific player helpers
@@ -139,7 +139,7 @@ import { getHuyaStreamConfig } from '../../platforms/huya/playerHelper';
 import { getBilibiliStreamConfig } from '../../platforms/bilibili/playerHelper';
 
 import StreamerInfo from '../StreamerInfo/index.vue';
-import DanmuList from '../DanmuList/index.vue';
+import MessageList from '../MessageList/index.vue';
 import LoadingDots from '../Common/LoadingDots.vue';
 
 import { invoke } from '@tauri-apps/api/core';
@@ -164,13 +164,13 @@ const playerInstance = shallowRef<Player | null>(null);
 const refreshControlPlugin = shallowRef<RefreshControl | null>(null);
 const qualityControlPlugin = shallowRef<QualityControl | null>(null);
 const lineControlPlugin = shallowRef<LineControl | null>(null);
-const danmuTogglePlugin = shallowRef<DanmuToggleControl | null>(null);
-const danmuSettingsPlugin = shallowRef<DanmuSettingsControl | null>(null);
+const messageTogglePlugin = shallowRef<MessageToggleControl | null>(null);
+const messageSettingsPlugin = shallowRef<MessageSettingsControl | null>(null);
 const volumeControlPlugin = shallowRef<VolumeControl | null>(null);
-const danmuInstance = shallowRef<DanmuOverlayInstance | null>(null);
-const danmakuMessages = ref<DanmakuMessage[]>([]);
-const isDanmakuListenerActive = ref(false); // Tracks if a danmaku listener is supposed to be running
-const unlistenDanmakuFn = ref<(() => void) | null>(null);
+const messageInstance = shallowRef<MessageOverlayInstance | null>(null);
+const messageMessages = ref<Message[]>([]);
+const isMessageListenerActive = ref(false); // Tracks if a message listener is supposed to be running
+const unlistenMessageFn = ref<(() => void) | null>(null);
 
 const isLoadingStream = ref(true);
 const streamError = ref<string | null>(null);
@@ -186,8 +186,8 @@ const isInNativePlayerFullscreen = ref(false); // New: Tracks Artplayer element'
 const isInWebFullscreen = ref(false);
 const isFullScreen = ref(false); // True if EITHER native player OR web fullscreen is active
 
-const isDanmuEnabled = ref(true);
-const danmuSettings = reactive<DanmuUserSettings>({
+const isMessageEnabled = ref(true);
+const messageSettings = reactive<MessageUserSettings>({
   color: '#ffffff',
   strokeColor: '#444444',
   fontSize: '20px',
@@ -197,10 +197,10 @@ const danmuSettings = reactive<DanmuUserSettings>({
   opacity: 1,
 });
 
-const storedDanmuPreferences = loadDanmuPreferences();
-if (storedDanmuPreferences) {
-  isDanmuEnabled.value = storedDanmuPreferences.enabled;
-  Object.assign(danmuSettings, storedDanmuPreferences.settings);
+const storedMessagePreferences = loadMessagePreferences();
+if (storedMessagePreferences) {
+  isMessageEnabled.value = storedMessagePreferences.enabled;
+  Object.assign(messageSettings, storedMessagePreferences.settings);
 }
 
 // OS specific states
@@ -260,26 +260,26 @@ function destroyPlayerInstance() {
     } catch (error) {
       console.error('[Player] Error destroying xgplayer instance:', error);
     }
-    const overlayHost = player.root?.querySelector('.player-danmu-overlay') as HTMLElement | null;
+    const overlayHost = player.root?.querySelector('.player-message-overlay') as HTMLElement | null;
     overlayHost?.remove();
   }
   playerInstance.value = null;
 
-  const danmu = danmuInstance.value;
-  if (danmu) {
+  const message = messageInstance.value;
+  if (message) {
     try {
-      danmu.stop?.();
+      message.stop?.();
     } catch (error) {
-      console.error('[Player] Error stopping danmu overlay:', error);
+      console.error('[Player] Error stopping message overlay:', error);
     }
-    danmuInstance.value = null;
+    messageInstance.value = null;
   }
 
   refreshControlPlugin.value = null;
   qualityControlPlugin.value = null;
   lineControlPlugin.value = null;
-  danmuTogglePlugin.value = null;
-  danmuSettingsPlugin.value = null;
+  messageTogglePlugin.value = null;
+  messageSettingsPlugin.value = null;
   volumeControlPlugin.value = null;
 
   resetFullscreenState();
@@ -407,51 +407,51 @@ async function mountXgPlayer(
     index: 3,
   }) as VolumeControl;
 
-  danmuTogglePlugin.value = player.registerPlugin(DanmuToggleControl, {
+  messageTogglePlugin.value = player.registerPlugin(MessageToggleControl, {
     position: POSITIONS.CONTROLS_RIGHT,
     index: 4,
-    getState: () => isDanmuEnabled.value,
+    getState: () => isMessageEnabled.value,
     onToggle: (enabled: boolean) => {
-      isDanmuEnabled.value = enabled;
+      isMessageEnabled.value = enabled;
     },
-  }) as DanmuToggleControl;
+  }) as MessageToggleControl;
 
-  danmuSettingsPlugin.value = player.registerPlugin(DanmuSettingsControl, {
+  messageSettingsPlugin.value = player.registerPlugin(MessageSettingsControl, {
     position: POSITIONS.CONTROLS_RIGHT,
     index: 4.2,
     getSettings: () => ({
-      color: danmuSettings.color,
-      strokeColor: danmuSettings.strokeColor,
-      fontSize: danmuSettings.fontSize,
-      duration: danmuSettings.duration,
-      area: danmuSettings.area,
-      mode: danmuSettings.mode,
-      opacity: danmuSettings.opacity,
+      color: messageSettings.color,
+      strokeColor: messageSettings.strokeColor,
+      fontSize: messageSettings.fontSize,
+      duration: messageSettings.duration,
+      area: messageSettings.area,
+      mode: messageSettings.mode,
+      opacity: messageSettings.opacity,
     }),
-    onChange: (partial: Partial<DanmuUserSettings>) => {
+    onChange: (partial: Partial<MessageUserSettings>) => {
       if (partial.color) {
-        danmuSettings.color = partial.color;
+        messageSettings.color = partial.color;
       }
       if (partial.strokeColor) {
-        danmuSettings.strokeColor = partial.strokeColor;
+        messageSettings.strokeColor = partial.strokeColor;
       }
       if (partial.fontSize) {
-        danmuSettings.fontSize = partial.fontSize;
+        messageSettings.fontSize = partial.fontSize;
       }
       if (typeof partial.duration === 'number') {
-        danmuSettings.duration = partial.duration;
+        messageSettings.duration = partial.duration;
       }
       if (typeof partial.area === 'number') {
-        danmuSettings.area = sanitizeDanmuArea(partial.area);
+        messageSettings.area = sanitizeMessageArea(partial.area);
       }
       if (partial.mode) {
-        danmuSettings.mode = partial.mode;
+        messageSettings.mode = partial.mode;
       }
       if (typeof partial.opacity === 'number') {
-        danmuSettings.opacity = sanitizeDanmuOpacity(partial.opacity);
+        messageSettings.opacity = sanitizeMessageOpacity(partial.opacity);
       }
     },
-  }) as DanmuSettingsControl;
+  }) as MessageSettingsControl;
 
   qualityControlPlugin.value = player.registerPlugin(QualityControl, {
     position: POSITIONS.CONTROLS_RIGHT,
@@ -487,20 +487,20 @@ async function mountXgPlayer(
 
   arrangeControlClusters(player);
 
-  let overlayInstance = createDanmuOverlay(player, danmuSettings, isDanmuEnabled.value);
-  danmuInstance.value = overlayInstance;
+  let overlayInstance = createMessageOverlay(player, messageSettings, isMessageEnabled.value);
+  messageInstance.value = overlayInstance;
 
   player.on('ready', async () => {
     arrangeControlClusters(player);
-    ensureDanmuOverlayHost(player);
-    overlayInstance = overlayInstance ?? createDanmuOverlay(player, danmuSettings, isDanmuEnabled.value);
-    danmuInstance.value = overlayInstance;
+    ensureMessageOverlayHost(player);
+    overlayInstance = overlayInstance ?? createMessageOverlay(player, messageSettings, isMessageEnabled.value);
+    messageInstance.value = overlayInstance;
     try {
       if (roomId) {
-        await startCurrentDanmakuListener(platformCode, roomId, overlayInstance);
+        await startCurrentMessageListener(platformCode, roomId, overlayInstance);
       }
     } catch (error) {
-      console.error('[Player] Failed starting danmaku listener after ready:', error);
+      console.error('[Player] Failed starting message listener after ready:', error);
     }
     overlayInstance?.play?.();
     updateFullscreenFlag();
@@ -517,7 +517,7 @@ async function mountXgPlayer(
   player.on('destroy', () => {
     overlayInstance?.stop?.();
     overlayInstance = null;
-    danmuInstance.value = null;
+    messageInstance.value = null;
   });
 
   player.on('error', (error: any) => {
@@ -527,18 +527,18 @@ async function mountXgPlayer(
 
   player.on('enterFullscreen', () => {
     isInNativePlayerFullscreen.value = true;
-    ensureDanmuOverlayHost(player);
-    overlayInstance = overlayInstance ?? createDanmuOverlay(player, danmuSettings, isDanmuEnabled.value);
-    danmuInstance.value = overlayInstance;
+    ensureMessageOverlayHost(player);
+    overlayInstance = overlayInstance ?? createMessageOverlay(player, messageSettings, isMessageEnabled.value);
+    messageInstance.value = overlayInstance;
     overlayInstance?.play?.();
     updateFullscreenFlag();
   });
 
   player.on('exitFullscreen', () => {
     isInNativePlayerFullscreen.value = false;
-    ensureDanmuOverlayHost(player);
-    overlayInstance = overlayInstance ?? createDanmuOverlay(player, danmuSettings, isDanmuEnabled.value);
-    danmuInstance.value = overlayInstance;
+    ensureMessageOverlayHost(player);
+    overlayInstance = overlayInstance ?? createMessageOverlay(player, messageSettings, isMessageEnabled.value);
+    messageInstance.value = overlayInstance;
     updateFullscreenFlag();
   });
 
@@ -549,9 +549,9 @@ async function mountXgPlayer(
     } catch (error) {
       console.warn('[Player] Failed to set web fullscreen flag:', error);
     }
-    ensureDanmuOverlayHost(player);
-    overlayInstance = overlayInstance ?? createDanmuOverlay(player, danmuSettings, isDanmuEnabled.value);
-    danmuInstance.value = overlayInstance;
+    ensureMessageOverlayHost(player);
+    overlayInstance = overlayInstance ?? createMessageOverlay(player, messageSettings, isMessageEnabled.value);
+    messageInstance.value = overlayInstance;
     overlayInstance?.play?.();
     arrangeControlClusters(player);
     updateFullscreenFlag();
@@ -564,9 +564,9 @@ async function mountXgPlayer(
     } catch (error) {
       console.warn('[Player] Failed to clear web fullscreen flag:', error);
     }
-    ensureDanmuOverlayHost(player);
-    overlayInstance = overlayInstance ?? createDanmuOverlay(player, danmuSettings, isDanmuEnabled.value);
-    danmuInstance.value = overlayInstance;
+    ensureMessageOverlayHost(player);
+    overlayInstance = overlayInstance ?? createMessageOverlay(player, messageSettings, isMessageEnabled.value);
+    messageInstance.value = overlayInstance;
     arrangeControlClusters(player);
     updateFullscreenFlag();
   });
@@ -582,9 +582,9 @@ async function mountXgPlayer(
     } catch (error) {
       console.warn('[Player] Failed toggling css fullscreen flag:', error);
     }
-    ensureDanmuOverlayHost(player);
-    overlayInstance = overlayInstance ?? createDanmuOverlay(player, danmuSettings, isDanmuEnabled.value);
-    danmuInstance.value = overlayInstance;
+    ensureMessageOverlayHost(player);
+    overlayInstance = overlayInstance ?? createMessageOverlay(player, messageSettings, isMessageEnabled.value);
+    messageInstance.value = overlayInstance;
     if (isCssFullscreen) {
       overlayInstance?.play?.();
     }
@@ -606,11 +606,11 @@ async function initializePlayerAndStream(
   streamError.value = null;
   isOfflineError.value = false;
 
-  // Detect OS and adjust danmu font family per platform
-  osName.value = await applyDanmuFontFamilyForOS();
+  // Detect OS and adjust message font family per platform
+  osName.value = await applyMessageFontFamilyForOS();
 
   if (!isRefresh) {
-    danmakuMessages.value = [];
+    messageMessages.value = [];
   }
 
   if (props.initialError && props.initialError.includes('主播未开播')) {
@@ -626,12 +626,12 @@ async function initializePlayerAndStream(
   }
 
   if (oldRoomIdForCleanup && oldPlatformForCleanup !== undefined && oldPlatformForCleanup !== null) {
-    await stopCurrentDanmakuListener(oldPlatformForCleanup, oldRoomIdForCleanup);
+    await stopCurrentMessageListener(oldPlatformForCleanup);
     if (oldPlatformForCleanup === StreamingPlatform.DOUYU) {
       await stopDouyuProxy();
     }
   } else {
-    await stopCurrentDanmakuListener();
+    await stopCurrentMessageListener();
   }
 
   destroyPlayerInstance();
@@ -713,21 +713,21 @@ async function initializePlayerAndStream(
     isLoadingStream.value = false;
   }
 }
-const danmakuManagerContext = {
-  danmakuMessages,
-  isDanmuEnabled,
-  danmuSettings,
-  isDanmakuListenerActive,
-  unlistenDanmakuFn,
+const messageManagerContext = {
+  messages: messageMessages,
+  isMessageEnabled,
+  messageSettings: messageSettings,
+  isMessageListenerActive,
+  unlistenMessageFn,
   props,
 };
 
-const startCurrentDanmakuListener = async (platform: StreamingPlatform, roomId: string, danmuOverlay: DanmuOverlayInstance | null) => {
-  await startDanmakuListener(danmakuManagerContext, platform, roomId, danmuOverlay);
+const startCurrentMessageListener = async (platform: StreamingPlatform, roomId: string, messageOverlay: MessageOverlayInstance | null) => {
+  await startMessageListener(messageManagerContext, platform, roomId, messageOverlay);
 };
 
-const stopCurrentDanmakuListener = async (platform?: StreamingPlatform, roomId?: string | null | undefined) => {
-  await stopDanmakuListener(danmakuManagerContext, platform, roomId);
+const stopCurrentMessageListener = async (platform?: StreamingPlatform) => {
+  await stopMessageListener(messageManagerContext, platform);
 };
 
 const retryInitialization = async () => {
@@ -848,20 +848,20 @@ async function reloadCurrentStream(trigger: 'refresh' | 'quality' | 'line' = 're
   }
 }
 
-const getDanmuSettingsSnapshot = (): DanmuUserSettings => ({
-  color: danmuSettings.color,
-  strokeColor: danmuSettings.strokeColor,
-  fontSize: danmuSettings.fontSize,
-  duration: danmuSettings.duration,
-  area: sanitizeDanmuArea(danmuSettings.area),
-  mode: danmuSettings.mode,
-  opacity: sanitizeDanmuOpacity(danmuSettings.opacity),
+const getMessageSettingsSnapshot = (): MessageUserSettings => ({
+  color: messageSettings.color,
+  strokeColor: messageSettings.strokeColor,
+  fontSize: messageSettings.fontSize,
+  duration: messageSettings.duration,
+  area: sanitizeMessageArea(messageSettings.area),
+  mode: messageSettings.mode,
+  opacity: sanitizeMessageOpacity(messageSettings.opacity),
 });
 
-const persistCurrentDanmuPreferences = () => {
-  persistDanmuPreferences({
-    enabled: isDanmuEnabled.value,
-    settings: getDanmuSettingsSnapshot(),
+const persistCurrentMessagePreferences = () => {
+  persistMessagePreferences({
+    enabled: isMessageEnabled.value,
+    settings: getMessageSettingsSnapshot(),
   });
 };
 
@@ -878,22 +878,22 @@ registerPlayerWatchers({
   persistLinePreference,
   props,
   resolveStoredLine,
-  isDanmuEnabled,
-  danmuTogglePlugin,
-  danmuInstance,
-  danmuSettingsPlugin,
-  danmuSettings,
-  applyDanmuOverlayPreferences,
-  syncDanmuEnabledState,
-  persistCurrentDanmuPreferences,
+  isMessageEnabled,
+  messageTogglePlugin,
+  messageInstance,
+  messageSettingsPlugin,
+  messageSettings,
+  applyMessageOverlayPreferences,
+  syncMessageEnabledState,
+  persistCurrentMessagePreferences,
   currentQuality,
   initializeQualityPreference,
   initializePlayerAndStream,
-  stopCurrentDanmakuListener,
+  stopCurrentMessageListener,
   stopDouyuProxy,
   destroyPlayerInstance,
   isLoadingStream,
-  danmakuMessages,
+  messageMessages,
   streamError,
   isOfflineError,
   playerTitle,
@@ -920,20 +920,19 @@ onMounted(async () => {
     isLoadingStream.value = false;
   }
 
-  persistCurrentDanmuPreferences();
+  persistCurrentMessagePreferences();
 });
 
 onUnmounted(async () => {
   const platformToStop: StreamingPlatform = props.platform;
-  const roomIdToStop: string | null = props.roomId;
-  await stopCurrentDanmakuListener(platformToStop, roomIdToStop);
+  await stopCurrentMessageListener(platformToStop);
 
   if (props.platform === StreamingPlatform.DOUYU) {
     await stopDouyuProxy();
   }
 
   destroyPlayerInstance();
-  danmakuMessages.value = []; 
+  messageMessages.value = []; 
 });
 
 </script>

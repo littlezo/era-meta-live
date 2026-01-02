@@ -1,4 +1,4 @@
-// This file makes the 'danmu' directory a module.
+// This file makes the 'message' directory a module.
 
 pub mod gen;
 pub mod message_handler;

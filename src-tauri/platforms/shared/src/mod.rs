@@ -5,10 +5,10 @@ pub mod types_rust;
 
 // Re-export necessary types to make them available directly under platforms::shared::TypeName
 pub use http_client::FollowHttpClient;
-pub use types::BilibiliDanmakuState;
-pub use types::DanmakuFrontendPayload;
-pub use types::DouyinDanmakuState;
-pub use types::DouyuDanmakuState;
+pub use types::BilibiliMessageState;
+pub use types::MessageFrontendPayload;
+pub use types::DouyinMessageState;
+pub use types::DouyuMessageState;
 pub use types::GetStreamUrlPayload;
-pub use types::HuyaDanmakuState;
+pub use types::HuyaMessageState;
 pub use types::LiveStreamInfo;

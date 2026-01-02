@@ -1,5 +1,5 @@
 import type { StreamerDetails, StreamPlaybackDetails, CommonCategoryGroup, CommonPlatformCategory } from '../common/types';
-import { CommonDanmakuMessage } from '../common/types';
+import { CommonMessage } from '../common/types';
 import { v4 as uuidv4 } from 'uuid';
 import { DouyuRawCategoriesResponseData, DouyuRawCategoryGroup, DouyuRawGameCategory, DouyuRoomInfo } from './types';
 
@@ -43,13 +43,13 @@ export function parseDouyuRoomDataToStreamerDetails(roomId: string, data: DouyuR
   };
 }
 
-export function parseDouyuDanmakuMessage(rawPayload: any): CommonDanmakuMessage | null {
+export function parseDouyuMessage(rawPayload: any): CommonMessage | null {
   if (!rawPayload || !rawPayload.type) {
-    // console.warn('[Douyu Parser] Received danmaku payload without type:', rawPayload);
+    // console.warn('[Douyu Parser] Received message payload without type:', rawPayload);
     return null; // Or handle as a generic system message
   }
 
-  let commonType: CommonDanmakuMessage['type'] = 'other';
+  let commonType: CommonMessage['type'] = 'other';
   let content = rawPayload.content || '';
 
   switch (rawPayload.type) {
@@ -68,7 +68,7 @@ export function parseDouyuDanmakuMessage(rawPayload: any): CommonDanmakuMessage 
       break;
     // Add other Douyu specific type mappings here
     default:
-      // console.log('[Douyu Parser] Unhandled Douyu danmaku type:', rawPayload.type, rawPayload);
+      // console.log('[Douyu Parser] Unhandled Douyu message type:', rawPayload.type, rawPayload);
       // Keep as 'other' or return null if you don't want to display unhandled types
       break;
   }

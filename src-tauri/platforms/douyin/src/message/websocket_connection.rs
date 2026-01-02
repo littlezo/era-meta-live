@@ -10,7 +10,7 @@ use urlencoding;
 // use url::Url; // REMOVED AGAIN
 // use rand::Rng; // REMOVED AGAIN
 
-// Adjusted imports to use `super` for sibling modules within `danmu`
+// Adjusted imports to use `super` for sibling modules within `message`
 use super::gen::PushFrame; // Removed ::douyin
 use super::signature; // For generate_signature
 use super::web_fetcher::DouyinLiveWebFetcher;

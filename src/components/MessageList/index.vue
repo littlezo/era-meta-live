@@ -1,33 +1,33 @@
 <template>
-    <div class="danmu-list-wrapper">
-      <div class="danmu-messages-area" ref="danmakuListEl" @scroll="handleScroll" @pointerdown="onPointerDown">
+    <div class="message-list-wrapper">
+      <div class="message-messages-area" ref="messageListEl" @scroll="handleScroll" @pointerdown="onPointerDown">
         <!-- Empty/Loading Placeholder -->
-        <div v-if="(!renderMessages || renderMessages.length === 0)" class="empty-danmu-placeholder">
+        <div v-if="(!renderMessages || renderMessages.length === 0)" class="empty-message-placeholder">
           <p v-if="!props.roomId">请先选择一个直播间</p>
-          <p v-else>暂无弹幕或连接中...</p> <!-- Simplified placeholder -->
+          <p v-else>暂无消息或连接中...</p> <!-- Simplified placeholder -->
         </div>
 
         <div
-          v-for="(danmaku, idx) in renderMessages"
-          :key="danmaku.id || `${danmaku.room_id || ''}-${danmaku.nickname}-${danmaku.content}-${idx}`" 
-          :class="['danmu-item', { 'system-message': danmaku.isSystem, 'success': danmaku.isSystem && danmaku.type === 'success' }]"
-          @click="copyDanmaku(danmaku)"
-          title="点击复制弹幕"
+          v-for="(message, idx) in renderMessages"
+          :key="message.id || `${message.room_id || ''}-${message.nickname}-${message.content}-${idx}`" 
+          :class="['message-item', { 'system-message': message.isSystem, 'success': message.isSystem && message.type === 'success' }]"
+          @click="copyMessage(message)"
+          title="点击复制消息"
         >
-          <div class="danmu-meta-line" v-if="!danmaku.isSystem">
-            <span v-if="danmaku.badgeName" class="danmu-badge">
-              <span class="badge-name">{{ danmaku.badgeName }}</span>
-              <span v-if="danmaku.badgeLevel" class="badge-level">{{ danmaku.badgeLevel }}</span>
+          <div class="message-meta-line" v-if="!message.isSystem">
+            <span v-if="message.badgeName" class="message-badge">
+              <span class="badge-name">{{ message.badgeName }}</span>
+              <span v-if="message.badgeLevel" class="badge-level">{{ message.badgeLevel }}</span>
             </span>
-            <span class="danmu-user" :style="{ color: danmaku.color || userColor(danmaku.nickname) }">
-              <span v-if="danmaku.level" class="user-level">[Lv.{{ danmaku.level }}]</span>
-              {{ danmaku.nickname }}
+            <span class="message-user" :style="{ color: message.color || userColor(message.nickname) }">
+              <span v-if="message.level" class="user-level">[Lv.{{ message.level }}]</span>
+              {{ message.nickname }}
             </span>
           </div>
-          <div class="danmu-content-line">
-            <span class="danmu-content">
-              <svg v-if="danmaku.isSystem && danmaku.type === 'success'" class="inline-icon success-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
-              {{ danmaku.content }}
+          <div class="message-content-line">
+            <span class="message-content">
+              <svg v-if="message.isSystem && message.type === 'success'" class="inline-icon success-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              {{ message.content }}
             </span>
           </div>
         </div>
@@ -38,7 +38,7 @@
   <script setup lang="ts">
   import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 
-  interface DanmakuUIMessage {
+  interface MessageUIMessage {
     id?: string;
     nickname: string;
     content: string;
@@ -53,10 +53,10 @@
   
 const props = defineProps<{
   roomId: string | null;
-  messages: DanmakuUIMessage[];
+  messages: MessageUIMessage[];
 }>();
 
-const danmakuListEl = ref<HTMLElement | null>(null);
+const messageListEl = ref<HTMLElement | null>(null);
 const autoScroll = ref(true); 
 const userScrolled = ref(false);
 const pointerActive = ref(false);
@@ -78,13 +78,13 @@ const userColor = (nickname: string | undefined) => {
   };
   
 const isNearBottom = () => {
-  const el = danmakuListEl.value;
+  const el = messageListEl.value;
   if (!el) return true;
   return el.scrollHeight - el.scrollTop - el.clientHeight <= 40;
 };
 
 const handleScroll = () => {
-  if (!danmakuListEl.value) return;
+  if (!messageListEl.value) return;
   const atBottom = isNearBottom();
   userScrolled.value = !atBottom;
   autoScroll.value = atBottom && !pointerActive.value;
@@ -97,7 +97,7 @@ watch(autoScroll, (newValue) => {
   }
 });
   
-  const renderMessages = ref<DanmakuUIMessage[]>([]);
+  const renderMessages = ref<MessageUIMessage[]>([]);
   const MAX_MSG = 200;
   const PRUNE_BATCH = 100;
   
@@ -118,7 +118,7 @@ const onPointerDown = () => {
   
   const scrollToBottomForce = () => {
     nextTick(() => {
-      const el = danmakuListEl.value;
+      const el = messageListEl.value;
       if (!el) return;
       // 使用 scrollTo({behavior: 'auto'}) 替代平滑滚动，确保锚点准确
       requestAnimationFrame(() => {
@@ -167,13 +167,13 @@ onUnmounted(() => {
   window.removeEventListener('pointerup', onGlobalPointerUp);
 });
 
-const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
+const copyMessage = async (message: MessageUIMessage) => {
   const parts: string[] = [];
-  if (danmaku.nickname) {
-    const levelStr = danmaku.level ? ` [Lv.${danmaku.level}]` : '';
-    parts.push(`${danmaku.nickname}${levelStr}:`);
+  if (message.nickname) {
+    const levelStr = message.level ? ` [Lv.${message.level}]` : '';
+    parts.push(`${message.nickname}${levelStr}:`);
   }
-  parts.push(danmaku.content || '');
+  parts.push(message.content || '');
   const text = parts.join(' ');
 
   try {
@@ -190,14 +190,14 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
       document.body.removeChild(textarea);
     }
   } catch (err) {
-    console.warn('复制弹幕失败', err);
+    console.warn('复制消息失败', err);
   }
 };
   
   </script>
   
   <style scoped>
-  .danmu-list-wrapper {
+  .message-list-wrapper {
     display: flex;
     flex-direction: column;
     position: relative;
@@ -209,7 +209,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     color: var(--primary-text, #e5e9f5);
-    font-family: var(--danmu-font-family, "HarmonyOS Sans Bold", "HarmonyOS Sans", "PingFang SC", "Helvetica Neue", Arial, sans-serif);
+    font-family: var(--message-font-family, "HarmonyOS Sans Bold", "HarmonyOS Sans", "PingFang SC", "Helvetica Neue", Arial, sans-serif);
     border-radius: 0 16px 16px 0;
     border: 1px solid var(--glass-border);
     border-left: none;
@@ -218,20 +218,20 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     isolation: isolate;
   }
 
-  .danmu-list-wrapper::before {
+  .message-list-wrapper::before {
     display: none;
   }
 
-  .danmu-list-wrapper::after {
+  .message-list-wrapper::after {
     display: none;
   }
 
-  .danmu-list-wrapper > * {
+  .message-list-wrapper > * {
     position: relative;
     z-index: 1;
   }
   
-  .danmu-messages-area {
+  .message-messages-area {
     position: relative;
     flex: 1;
     min-height: 0;
@@ -241,7 +241,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     scroll-behavior: smooth;
   }
   
-  .empty-danmu-placeholder {
+  .empty-message-placeholder {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -249,11 +249,11 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     text-align: center;
     width: 100%;
   }
-  .empty-danmu-placeholder p {
+  .empty-message-placeholder p {
     margin: 4px 0;
   }
   
-.danmu-item {
+.message-item {
   text-align: left;
   padding: 6px 10px;
   border-radius: 12px;
@@ -270,11 +270,11 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
   cursor: pointer;
 }
   
-.danmu-item:hover {
+.message-item:hover {
   transform: translateY(-2px);
 }
   
-.danmu-meta-line {
+.message-meta-line {
   font-size: 0.72rem;
   color: rgba(204, 212, 236, 0.72);
   margin-bottom: 0;
@@ -285,7 +285,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
   gap: 6px;
 }
   
-  .danmu-badge {
+  .message-badge {
     background: linear-gradient(135deg, rgba(92, 153, 255, 0.75), rgba(236, 112, 214, 0.68)); 
     color: #ffffff; 
     padding: 2px 7px;
@@ -307,7 +307,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     font-size: 0.62rem; 
   }
   
-  .danmu-user {
+  .message-user {
     font-weight: 600;
     margin-right: 6px;
     color: inherit;
@@ -319,14 +319,14 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     margin-right: 5px;
   }
   
-.danmu-content-line {
+.message-content-line {
   font-size: 0.8rem;
   line-height: 1.4;
   display: inline-flex;
   max-width: 100%;
 }
 
-.danmu-content {
+.message-content {
   color: rgba(244, 246, 255, 0.94); 
   white-space: pre-wrap; 
   word-wrap: break-word;
@@ -344,31 +344,31 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
   max-width: 100%;
 }
   
-  .danmu-messages-area::-webkit-scrollbar {
+  .message-messages-area::-webkit-scrollbar {
     width: 6px;
   }
   
-  .danmu-messages-area::-webkit-scrollbar-track {
+  .message-messages-area::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.06);
     border-radius: 3px;
   }
   
-  .danmu-messages-area::-webkit-scrollbar-thumb {
+  .message-messages-area::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.5);
     border-radius: 3px;
   }
   
-  .danmu-messages-area::-webkit-scrollbar-thumb:hover {
+  .message-messages-area::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.7);
   }
   
-  .danmu-messages-area {
+  .message-messages-area {
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.5) rgba(255, 255, 255, 0.06);
   }
 
   @media (max-width: 1024px) {
-    .danmu-list-wrapper {
+    .message-list-wrapper {
       width: 100%;
       border-radius: 12px;
       border-left: 1px solid rgba(255, 255, 255, 0.08);
@@ -405,7 +405,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     font-weight: 500;
   }
   
-  .danmu-item.system-message {
+  .message-item.system-message {
     background: rgba(57, 185, 108, 0.16);
     border-left: 3px solid rgba(57, 185, 108, 0.75);
     margin-top: 4px;
@@ -413,12 +413,12 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     box-shadow: 0 10px 20px rgba(26, 54, 39, 0.32);
   }
 
-  .danmu-item.system-message .danmu-content {
+  .message-item.system-message .message-content {
     font-weight: 500;
     color: rgba(210, 240, 220, 0.95);
   }
 
-  .danmu-item.system-message.success .danmu-content {
+  .message-item.system-message.success .message-content {
     color: #49df85;
     font-weight: 600;
     background: transparent;
@@ -426,7 +426,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
     padding: 0;
   }
 
-  .danmu-item.system-message.success {
+  .message-item.system-message.success {
     background: transparent;
     border-left: none;
     box-shadow: none;
@@ -444,7 +444,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
 }
   
 
-:root[data-theme="light"] .danmu-list-wrapper {
+:root[data-theme="light"] .message-list-wrapper {
   background: var(--glass-bg);
   color: var(--primary-text-light, #1f2937);
   border: 1px solid var(--glass-border);
@@ -452,39 +452,39 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
   box-shadow: none;
 }
 
-:root[data-theme="light"] .danmu-list-wrapper::before {
+:root[data-theme="light"] .message-list-wrapper::before {
   display: none;
 }
 
-:root[data-theme="light"] .danmu-list-wrapper::after {
+:root[data-theme="light"] .message-list-wrapper::after {
   display: none;
 }
 
-:root[data-theme="light"] .danmu-messages-area {
+:root[data-theme="light"] .message-messages-area {
   scrollbar-color: rgba(107, 114, 128, 0.7) rgba(229, 231, 235, 0.9);
 }
 
-:root[data-theme="light"] .danmu-messages-area::-webkit-scrollbar-track {
+:root[data-theme="light"] .message-messages-area::-webkit-scrollbar-track {
   background: rgba(229, 231, 235, 0.9);
 }
 
-:root[data-theme="light"] .danmu-messages-area::-webkit-scrollbar-thumb {
+:root[data-theme="light"] .message-messages-area::-webkit-scrollbar-thumb {
   background-color: rgba(107, 114, 128, 0.7);
 }
 
-:root[data-theme="light"] .danmu-messages-area::-webkit-scrollbar-thumb:hover {
+:root[data-theme="light"] .message-messages-area::-webkit-scrollbar-thumb:hover {
   background-color: rgba(75, 85, 99, 0.8);
 }
 
-:root[data-theme="light"] .empty-danmu-placeholder p {
+:root[data-theme="light"] .empty-message-placeholder p {
   color: rgba(100, 116, 139, 0.85);
 }
 
-:root[data-theme="light"] .danmu-meta-line {
+:root[data-theme="light"] .message-meta-line {
   color: rgba(71, 85, 105, 0.85);
 }
 
-:root[data-theme="light"] .danmu-badge {
+:root[data-theme="light"] .message-badge {
   color: #ffffff; 
   box-shadow: 0 6px 14px rgba(100, 140, 255, 0.28);
 }
@@ -493,29 +493,29 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
   color: rgba(100, 116, 139, 0.78);
 }
 
-:root[data-theme="light"] .danmu-content {
+:root[data-theme="light"] .message-content {
   color: var(--primary-text-light, #1f2937);
   text-shadow: none;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
 }
 
-:root[data-theme="light"] .danmu-item.system-message {
+:root[data-theme="light"] .message-item.system-message {
   background: rgba(226, 246, 233, 0.95);
   border-left-color: rgba(78, 196, 120, 0.75);
 }
 
-:root[data-theme="light"] .danmu-item.system-message .danmu-content {
+:root[data-theme="light"] .message-item.system-message .message-content {
   color: rgba(31, 106, 58, 0.9);
 }
 
-:root[data-theme="light"] .danmu-item.system-message.success {
+:root[data-theme="light"] .message-item.system-message.success {
   background: transparent;
   border-left-color: transparent;
   box-shadow: none;
 }
 
-:root[data-theme="light"] .danmu-item.system-message.success .danmu-content {
+:root[data-theme="light"] .message-item.system-message.success .message-content {
   color: rgba(46, 114, 66, 0.95);
 }
 
@@ -528,7 +528,7 @@ const copyDanmaku = async (danmaku: DanmakuUIMessage) => {
 }
 
 @media (max-width: 1024px) {
-  :root[data-theme="light"] .danmu-list-wrapper {
+  :root[data-theme="light"] .message-list-wrapper {
     border-left: 1px solid rgba(189, 200, 224, 0.55);
   }
 }

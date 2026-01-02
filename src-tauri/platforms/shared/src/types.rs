@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 // Wrapper for payload like { args: { room_id_str: "..." } }
-// Used by get_douyin_live_stream_url and start_douyin_danmaku_listener
+// Used by get_douyin_live_stream_url and start_douyin_message_listener
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct PayloadWrapperForRoomId {
@@ -65,28 +65,28 @@ pub struct StreamUrlStore {
 }
 
 // Moved from main.rs
-// State for the Douyin Danmaku listener
+// State for the Douyin Message listener
 #[derive(Default)]
 #[allow(dead_code)]
-pub struct DouyinDanmakuState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
+pub struct DouyinMessageState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
 
-// State for the Bilibili Danmaku listener
+// State for the Bilibili Message listener
 #[derive(Default)]
 #[allow(dead_code)]
-pub struct BilibiliDanmakuState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
+pub struct BilibiliMessageState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
 
-// State for the Douyu Danmaku listener
+// State for the Douyu Message listener
 #[derive(Default)]
 #[allow(dead_code)]
-pub struct DouyuDanmakuState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
+pub struct DouyuMessageState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
 
-// State for the Huya Danmaku listener
+// State for the Huya Message listener
 #[derive(Default)]
 #[allow(dead_code)]
-pub struct HuyaDanmakuState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
+pub struct HuyaMessageState(pub std::sync::Mutex<Option<tokio::sync::mpsc::Sender<()>>>);
 
 #[derive(Serialize, Clone, Debug, specta::Type)]
-pub struct DanmakuFrontendPayload {
+pub struct MessageFrontendPayload {
     pub room_id: String,
     pub user: String,
     pub content: String,

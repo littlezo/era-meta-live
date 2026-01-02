@@ -1,13 +1,13 @@
 use super::gen::{ChatMessage, LikeMessage, MemberMessage, RoomStatsMessage}; // Updated to directly use types from gen
-use shared::DanmakuFrontendPayload;
+use shared::MessageFrontendPayload;
 use prost::Message as ProstMessage; // For .decode() // Use shared payload type
 
 // Parser for ChatMessage
 pub fn parse_chat_message(
-    payload: &[u8],
-    current_room_id: &str,
-) -> Result<Option<DanmakuFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
-    match ChatMessage::decode(payload) {
+    bytes: &[u8],
+    room_id: &str,
+) -> Result<Option<MessageFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
+    match ChatMessage::decode(bytes) {
         Ok(chat_msg) => {
             if let Some(user) = chat_msg.user {
                 // 获取用户等级 (来自 demo)
@@ -23,13 +23,12 @@ pub fn parse_chat_message(
                     .map(|fcd| fcd.level)
                     .unwrap_or(0);
 
-                Ok(Some(DanmakuFrontendPayload {
-                    room_id: current_room_id.to_string(), // Populate room_id
+                Ok(Some(MessageFrontendPayload {
+                    room_id: room_id.to_string(), // Populate room_id
                     user: user.nick_name.clone(),
                     content: chat_msg.content.clone(),
                     user_level,
                     fans_club_level,
-                    // r#type: "chat".to_string(),
                 }))
             } else {
                 // 对于没有用户信息的聊天消息 (例如系统消息)，也可能需要发送，但等级为0
@@ -37,8 +36,8 @@ pub fn parse_chat_message(
                     "    【聊天msg】Content: {} (no user info)",
                     chat_msg.content
                 );
-                Ok(Some(DanmakuFrontendPayload {
-                    room_id: current_room_id.to_string(), // Populate room_id
+                Ok(Some(MessageFrontendPayload {
+                    room_id: room_id.to_string(), // Populate room_id
                     user: "系统".to_string(),             // Or some other placeholder
                     content: chat_msg.content.clone(),
                     user_level: 0,
@@ -53,13 +52,13 @@ pub fn parse_chat_message(
     }
 }
 
-// Demo 中此函数返回 Result<(), ...> 并且只打印，这里保持原有返回 Option<DanmakuFrontendPayload> 结构
+// Demo 中此函数返回 Result<(), ...> 并且只打印，这里保持原有返回 Option<MessageFrontendPayload> 结构
 // 如果不需要将进场消息发送到前端，可以保持返回 Ok(None)
 #[allow(dead_code)] // ADDED to suppress warning
 pub fn parse_member_message(
     payload: &[u8],
     _current_room_id: &str,
-) -> Result<Option<DanmakuFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Option<MessageFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
     match MemberMessage::decode(payload) {
         Ok(member_msg) => {
             if let Some(user) = member_msg.user {
@@ -94,7 +93,7 @@ pub fn parse_member_message(
 pub fn parse_like_message(
     payload: &[u8],
     _current_room_id: &str,
-) -> Result<Option<DanmakuFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Option<MessageFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
     match LikeMessage::decode(payload) {
         Ok(like_msg) => {
             if let Some(user) = like_msg.user {
@@ -118,7 +117,7 @@ pub fn parse_like_message(
 pub fn parse_room_stats_message(
     payload: &[u8],
     _current_room_id: &str,
-) -> Result<Option<DanmakuFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Option<MessageFrontendPayload>, Box<dyn std::error::Error + Send + Sync>> {
     match RoomStatsMessage::decode(payload) {
         Ok(stats_msg) => {
             println!("    【直播间统计msg】{}", stats_msg.display_long);

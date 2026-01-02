@@ -1,4 +1,4 @@
-export { DanmuSettingsControl, DanmuToggleControl } from './danmuPlugins';
+export { MessageSettingsControl, MessageToggleControl } from './messagePlugins';
 export {
   LineControl,
   QualityControl,

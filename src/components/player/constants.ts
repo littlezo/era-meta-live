@@ -1,6 +1,6 @@
 import { platform } from '@tauri-apps/plugin-os';
 
-export type DanmuUserSettings = {
+export type MessageUserSettings = {
   color: string;
   strokeColor: string;
   fontSize: string;
@@ -10,23 +10,23 @@ export type DanmuUserSettings = {
   opacity: number;
 };
 
-export const DANMU_PREFERENCES_STORAGE_KEY = 'dtv_danmu_preferences_v1';
-export const DANMU_AREA_OPTIONS = [0.25, 0.5, 0.75] as const;
-export const DANMU_OPACITY_MIN = 0.2;
-export const DANMU_OPACITY_MAX = 1;
+export const MESSAGE_PREFERENCES_STORAGE_KEY = 'dtv_message_preferences_v1';
+export const MESSAGE_AREA_OPTIONS = [0.25, 0.5, 0.75] as const;
+export const MESSAGE_OPACITY_MIN = 0.2;
+export const MESSAGE_OPACITY_MAX = 1;
 export const PLAYER_VOLUME_STORAGE_KEY = 'dtv_player_volume_v1';
-export const DEFAULT_DANMU_FONT_FAMILY = '"HarmonyOS Sans Bold", "HarmonyOS Sans", "PingFang SC", "Helvetica Neue", Arial, sans-serif';
-export const WINDOWS_DANMU_FONT_FAMILY = '"HarmonyOS Sans Regular", "HarmonyOS Sans", "Microsoft YaHei", "Segoe UI", sans-serif';
+export const DEFAULT_MESSAGE_FONT_FAMILY = '"HarmonyOS Sans Bold", "HarmonyOS Sans", "PingFang SC", "Helvetica Neue", Arial, sans-serif';
+export const WINDOWS_MESSAGE_FONT_FAMILY = '"HarmonyOS Sans Regular", "HarmonyOS Sans", "Microsoft YaHei", "Segoe UI", sans-serif';
 
-export const sanitizeDanmuArea = (value: number): number => {
-  return DANMU_AREA_OPTIONS.reduce((prev, curr) => (Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev), DANMU_AREA_OPTIONS[0]);
+export const sanitizeMessageArea = (value: number): number => {
+  return MESSAGE_AREA_OPTIONS.reduce((prev, curr) => (Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev), MESSAGE_AREA_OPTIONS[0]);
 };
 
-export const sanitizeDanmuOpacity = (value: number): number => {
+export const sanitizeMessageOpacity = (value: number): number => {
   if (!Number.isFinite(value)) {
     return 1;
   }
-  return Math.min(DANMU_OPACITY_MAX, Math.max(DANMU_OPACITY_MIN, value));
+  return Math.min(MESSAGE_OPACITY_MAX, Math.max(MESSAGE_OPACITY_MIN, value));
 };
 
 export const loadStoredVolume = (): number | null => {
@@ -61,12 +61,12 @@ export const persistStoredVolume = (volume: number) => {
   }
 };
 
-export const loadDanmuPreferences = (): { enabled: boolean; settings: DanmuUserSettings } | null => {
+export const loadMessagePreferences = (): { enabled: boolean; settings: MessageUserSettings } | null => {
   if (typeof window === 'undefined' || !window.localStorage) {
     return null;
   }
   try {
-    const raw = window.localStorage.getItem(DANMU_PREFERENCES_STORAGE_KEY);
+    const raw = window.localStorage.getItem(MESSAGE_PREFERENCES_STORAGE_KEY);
     if (!raw) {
       return null;
     }
@@ -82,25 +82,25 @@ export const loadDanmuPreferences = (): { enabled: boolean; settings: DanmuUserS
         strokeColor: typeof settings.strokeColor === 'string' ? settings.strokeColor : '#444444',
         fontSize: typeof settings.fontSize === 'string' ? settings.fontSize : '20px',
         duration: Number.isFinite(settings.duration) ? settings.duration : 10000,
-        area: Number.isFinite(settings.area) ? sanitizeDanmuArea(settings.area) : 0.5,
+        area: Number.isFinite(settings.area) ? sanitizeMessageArea(settings.area) : 0.5,
         mode: settings.mode === 'top' || settings.mode === 'bottom' ? settings.mode : 'scroll',
-        opacity: Number.isFinite(settings.opacity) ? sanitizeDanmuOpacity(settings.opacity) : 1,
+        opacity: Number.isFinite(settings.opacity) ? sanitizeMessageOpacity(settings.opacity) : 1,
       },
     };
   } catch (error) {
-    console.warn('[DanmuPreferences] Failed to load preferences:', error);
+    console.warn('[MessagePreferences] Failed to load preferences:', error);
     return null;
   }
 };
 
-export const persistDanmuPreferences = (payload: { enabled: boolean; settings: DanmuUserSettings }) => {
+export const persistMessagePreferences = (payload: { enabled: boolean; settings: MessageUserSettings }) => {
   if (typeof window === 'undefined' || !window.localStorage) {
     return;
   }
   try {
-    window.localStorage.setItem(DANMU_PREFERENCES_STORAGE_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(MESSAGE_PREFERENCES_STORAGE_KEY, JSON.stringify(payload));
   } catch (error) {
-    console.warn('[DanmuPreferences] Failed to persist preferences:', error);
+    console.warn('[MessagePreferences] Failed to persist preferences:', error);
   }
 };
 
@@ -120,7 +120,7 @@ export const ICONS = {
   volume2: createLucideIconSvg('volume-2', '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path>')
 };
 
-export const applyDanmuFontFamilyForOS = async () => {
+export const applyMessageFontFamilyForOS = async () => {
   if (typeof document === 'undefined') {
     return '';
   }
@@ -128,7 +128,7 @@ export const applyDanmuFontFamilyForOS = async () => {
   try {
     osName = await platform();
   } catch (error) {
-    console.warn('[Player] Failed to detect platform for danmu font selection:', error);
+    console.warn('[Player] Failed to detect platform for message font selection:', error);
     osName = '';
   }
 
@@ -138,9 +138,9 @@ export const applyDanmuFontFamilyForOS = async () => {
   }
 
   if (/windows|win32/i.test(osName)) {
-    root.style.setProperty('--danmu-font-family', WINDOWS_DANMU_FONT_FAMILY);
+    root.style.setProperty('--message-font-family', WINDOWS_MESSAGE_FONT_FAMILY);
   } else {
-    root.style.setProperty('--danmu-font-family', DEFAULT_DANMU_FONT_FAMILY);
+    root.style.setProperty('--message-font-family', DEFAULT_MESSAGE_FONT_FAMILY);
   }
 
   return osName;

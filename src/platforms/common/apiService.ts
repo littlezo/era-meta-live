@@ -26,12 +26,12 @@ export async function fetchRoomInfo(roomId: string): Promise<StreamerDetails> {
   }
 }
 
-export async function startDanmakuListener(roomId: string): Promise<void> {
+export async function startMessageListener(roomId: string): Promise<void> {
   switch (currentPlatform) {
     case 'douyu':
-      return douyuApi.startDouyuDanmakuListener(roomId);
+      return douyuApi.startDouyuMessageListener(roomId);
     default:
-      console.error(`Platform ${currentPlatform} not supported for startDanmakuListener`);
+      console.error(`Platform ${currentPlatform} not supported for startMessageListener`);
       return Promise.reject(`Platform ${currentPlatform} not supported`);
   }
 }

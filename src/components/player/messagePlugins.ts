@@ -1,16 +1,16 @@
 import Plugin, { POSITIONS } from 'xgplayer/es/plugin/plugin.js';
 
 import {
-  DANMU_OPACITY_MAX,
-  DANMU_OPACITY_MIN,
+  MESSAGE_OPACITY_MAX,
+  MESSAGE_OPACITY_MIN,
   ICONS,
-  sanitizeDanmuArea,
-  sanitizeDanmuOpacity,
+  sanitizeMessageArea,
+  sanitizeMessageOpacity,
 } from './constants';
-import type { DanmuUserSettings } from './constants';
+import type { MessageUserSettings } from './constants';
 
-export class DanmuToggleControl extends Plugin {
-  static override pluginName = 'danmuToggle';
+export class MessageToggleControl extends Plugin {
+  static override pluginName = 'messageToggle';
   static override defaultConfig = {
     position: POSITIONS.CONTROLS_RIGHT,
     index: 4,
@@ -47,9 +47,9 @@ export class DanmuToggleControl extends Plugin {
     if (this.config.disable) {
       return '';
     }
-    return `<xg-icon class="xgplayer-danmu-toggle" title="" role="button" aria-pressed="${this.isActive}">
-      <span class="danmu-toggle-label">弹幕</span>
-      <span class="danmu-toggle-switch">
+    return `<xg-icon class="xgplayer-message-toggle" title="" role="button" aria-pressed="${this.isActive}">
+      <span class="message-toggle-label">消息</span>
+      <span class="message-toggle-switch">
         <span class="switch-track"></span>
         <span class="switch-thumb"></span>
       </span>
@@ -80,8 +80,8 @@ export class DanmuToggleControl extends Plugin {
   }
 }
 
-export class DanmuSettingsControl extends Plugin {
-  static override pluginName = 'danmuSettings';
+export class MessageSettingsControl extends Plugin {
+  static override pluginName = 'messageSettings';
   static override defaultConfig = {
     position: POSITIONS.CONTROLS_RIGHT,
     index: 4,
@@ -94,8 +94,8 @@ export class DanmuSettingsControl extends Plugin {
       area: 0.5,
       mode: 'scroll',
       opacity: 1,
-    })) as () => DanmuUserSettings,
-    onChange: (async (_partial: Partial<DanmuUserSettings>) => {}) as (partial: Partial<DanmuUserSettings>) => Promise<void> | void,
+    })) as () => MessageUserSettings,
+    onChange: (async (_partial: Partial<MessageUserSettings>) => {}) as (partial: Partial<MessageUserSettings>) => Promise<void> | void,
   };
 
   private panel: HTMLElement | null = null;
@@ -105,7 +105,7 @@ export class DanmuSettingsControl extends Plugin {
   private handleHoverLeave: ((event: Event) => void) | null = null;
   private hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
   private isOpen = false;
-  private currentSettings: DanmuUserSettings = {
+  private currentSettings: MessageUserSettings = {
     color: '#ffffff',
     strokeColor: '#444444',
     fontSize: '20px',
@@ -128,8 +128,8 @@ export class DanmuSettingsControl extends Plugin {
     this.currentSettings = typeof this.config.getSettings === 'function'
       ? this.config.getSettings()
       : this.currentSettings;
-    this.currentSettings.area = sanitizeDanmuArea(this.currentSettings.area);
-    this.currentSettings.opacity = sanitizeDanmuOpacity(this.currentSettings.opacity);
+    this.currentSettings.area = sanitizeMessageArea(this.currentSettings.area);
+    this.currentSettings.opacity = sanitizeMessageOpacity(this.currentSettings.opacity);
     if (typeof this.currentSettings.strokeColor !== 'string') {
       this.currentSettings.strokeColor = '#444444';
     }
@@ -210,40 +210,40 @@ export class DanmuSettingsControl extends Plugin {
     if (this.config.disable) {
       return '';
     }
-    return `<xg-icon class="xgplayer-danmu-settings" title="">
+    return `<xg-icon class="xgplayer-message-settings" title="">
       ${ICONS.cog}
     </xg-icon>`;
   }
 
   private createPanel() {
     this.panel = document.createElement('div');
-    this.panel.className = 'xgplayer-danmu-settings-panel';
+    this.panel.className = 'xgplayer-message-settings-panel';
     this.panel.innerHTML = `
       <div class="settings-shell">
         <div class="settings-body">
           <div class="settings-row settings-row-color">
             <span class="settings-label">颜色</span>
-            <input class="danmu-setting-color" type="color" value="${this.currentSettings.color}">
+            <input class="message-setting-color" type="color" value="${this.currentSettings.color}">
           </div>
           <div class="settings-row settings-row-color">
             <span class="settings-label">描边</span>
-            <input class="danmu-setting-stroke-color" type="color" value="${this.currentSettings.strokeColor}">
+            <input class="message-setting-stroke-color" type="color" value="${this.currentSettings.strokeColor}">
           </div>
           <div class="settings-row">
             <label>字体 <span class="settings-value font-size-value">${this.currentSettings.fontSize}</span></label>
-            <input class="danmu-setting-font-range" type="range" min="14" max="30" step="2" value="${parseInt(this.currentSettings.fontSize, 10)}">
+            <input class="message-setting-font-range" type="range" min="14" max="30" step="2" value="${parseInt(this.currentSettings.fontSize, 10)}">
           </div>
           <div class="settings-row">
             <label>速度 <span class="settings-value speed-value">${this.formatDurationLabel(this.currentSettings.duration)}</span></label>
-            <input class="danmu-setting-duration-range" type="range" min="3000" max="20000" step="500" value="${this.currentSettings.duration}">
+            <input class="message-setting-duration-range" type="range" min="3000" max="20000" step="500" value="${this.currentSettings.duration}">
           </div>
           <div class="settings-row">
             <label>显示区域 <span class="settings-value area-value">${this.formatAreaLabel(this.currentSettings.area)}</span></label>
-            <input class="danmu-setting-area-range" type="range" min="0.25" max="0.75" step="0.25" value="${this.currentSettings.area}">
+            <input class="message-setting-area-range" type="range" min="0.25" max="0.75" step="0.25" value="${this.currentSettings.area}">
           </div>
           <div class="settings-row">
             <label>透明度 <span class="settings-value opacity-value">${this.formatOpacityLabel(this.currentSettings.opacity)}</span></label>
-            <input class="danmu-setting-opacity-range" type="range" min="${DANMU_OPACITY_MIN}" max="${DANMU_OPACITY_MAX}" step="0.05" value="${this.currentSettings.opacity}">
+            <input class="message-setting-opacity-range" type="range" min="${MESSAGE_OPACITY_MIN}" max="${MESSAGE_OPACITY_MAX}" step="0.05" value="${this.currentSettings.opacity}">
           </div>
         </div>
       </div>
@@ -260,12 +260,12 @@ export class DanmuSettingsControl extends Plugin {
       event.stopPropagation();
     });
 
-    this.textColorInput = this.panel.querySelector<HTMLInputElement>('.danmu-setting-color');
-    this.strokeColorInput = this.panel.querySelector<HTMLInputElement>('.danmu-setting-stroke-color');
-    this.fontSizeSlider = this.panel.querySelector<HTMLInputElement>('.danmu-setting-font-range');
-    this.durationSlider = this.panel.querySelector<HTMLInputElement>('.danmu-setting-duration-range');
-    this.areaSlider = this.panel.querySelector<HTMLInputElement>('.danmu-setting-area-range');
-    this.opacitySlider = this.panel.querySelector<HTMLInputElement>('.danmu-setting-opacity-range');
+    this.textColorInput = this.panel.querySelector<HTMLInputElement>('.message-setting-color');
+    this.strokeColorInput = this.panel.querySelector<HTMLInputElement>('.message-setting-stroke-color');
+    this.fontSizeSlider = this.panel.querySelector<HTMLInputElement>('.message-setting-font-range');
+    this.durationSlider = this.panel.querySelector<HTMLInputElement>('.message-setting-duration-range');
+    this.areaSlider = this.panel.querySelector<HTMLInputElement>('.message-setting-area-range');
+    this.opacitySlider = this.panel.querySelector<HTMLInputElement>('.message-setting-opacity-range');
 
     this.textColorInput?.addEventListener('input', (event) => {
       const value = (event.target as HTMLInputElement).value;
@@ -280,7 +280,7 @@ export class DanmuSettingsControl extends Plugin {
 
     const handleRange = (
       el: HTMLInputElement | null,
-      key: keyof DanmuUserSettings,
+      key: keyof MessageUserSettings,
       transform: (value: string) => unknown,
       displaySelector: string,
       formatter: (value: number) => string,
@@ -297,7 +297,7 @@ export class DanmuSettingsControl extends Plugin {
         updateDisplay(numericValue);
         const nextValue = transform(rawValue);
         (this.currentSettings as Record<string, unknown>)[key as string] = nextValue;
-        this.emitChange({ [key]: nextValue } as Partial<DanmuUserSettings>);
+        this.emitChange({ [key]: nextValue } as Partial<MessageUserSettings>);
         this.updateSliderVisual(el);
       });
       if (el) {
@@ -331,7 +331,7 @@ export class DanmuSettingsControl extends Plugin {
       'area',
       (value) => {
         const numeric = Number(value);
-        return sanitizeDanmuArea(numeric);
+        return sanitizeMessageArea(numeric);
       },
       '.area-value',
       (value) => this.formatAreaLabel(value),
@@ -340,7 +340,7 @@ export class DanmuSettingsControl extends Plugin {
     handleRange(
       this.opacitySlider,
       'opacity',
-      (value) => sanitizeDanmuOpacity(Number(value)),
+      (value) => sanitizeMessageOpacity(Number(value)),
       '.opacity-value',
       (value) => this.formatOpacityLabel(value),
     );
@@ -422,7 +422,7 @@ export class DanmuSettingsControl extends Plugin {
       this.updateSliderVisual(this.durationSlider);
     }
     if (this.areaSlider) {
-      const areaValue = sanitizeDanmuArea(this.currentSettings.area);
+      const areaValue = sanitizeMessageArea(this.currentSettings.area);
       this.areaSlider.value = String(areaValue);
       const areaLabel = this.panel.querySelector<HTMLSpanElement>('.area-value');
       if (areaLabel) {
@@ -431,7 +431,7 @@ export class DanmuSettingsControl extends Plugin {
       this.updateSliderVisual(this.areaSlider);
     }
     if (this.opacitySlider) {
-      const opacityValue = sanitizeDanmuOpacity(this.currentSettings.opacity);
+      const opacityValue = sanitizeMessageOpacity(this.currentSettings.opacity);
       this.opacitySlider.value = String(opacityValue);
       const opacityLabel = this.panel.querySelector<HTMLSpanElement>('.opacity-value');
       if (opacityLabel) {
@@ -459,7 +459,7 @@ export class DanmuSettingsControl extends Plugin {
   }
 
   private formatAreaLabel(value: number): string {
-    const clamped = sanitizeDanmuArea(value);
+    const clamped = sanitizeMessageArea(value);
     if (clamped <= 0.25) {
       return '上 1/4';
     }
@@ -470,24 +470,24 @@ export class DanmuSettingsControl extends Plugin {
   }
 
   private formatOpacityLabel(value: number): string {
-    const normalized = sanitizeDanmuOpacity(value);
+    const normalized = sanitizeMessageOpacity(value);
     return `${Math.round(normalized * 100)}%`;
   }
 
-  private emitChange(partial: Partial<DanmuUserSettings>) {
+  private emitChange(partial: Partial<MessageUserSettings>) {
     const callback = this.config.onChange;
     if (typeof callback === 'function') {
       callback(partial);
     }
   }
 
-  setSettings(settings: Partial<DanmuUserSettings>) {
-    const normalized: Partial<DanmuUserSettings> = { ...settings };
+  setSettings(settings: Partial<MessageUserSettings>) {
+    const normalized: Partial<MessageUserSettings> = { ...settings };
     if (typeof normalized.area === 'number') {
-      normalized.area = sanitizeDanmuArea(normalized.area);
+      normalized.area = sanitizeMessageArea(normalized.area);
     }
     if (typeof normalized.opacity === 'number') {
-      normalized.opacity = sanitizeDanmuOpacity(normalized.opacity);
+      normalized.opacity = sanitizeMessageOpacity(normalized.opacity);
     }
     if (typeof normalized.strokeColor !== 'undefined' && typeof normalized.strokeColor !== 'string') {
       delete (normalized as any).strokeColor;

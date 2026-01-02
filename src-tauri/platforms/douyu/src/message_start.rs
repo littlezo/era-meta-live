@@ -8,13 +8,13 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::Message};
 use url::Url;
 
-pub struct DanmakuClient {
+pub struct MessageClient {
     room_id: String,
     window: Window,
     stop_signal_rx: oneshot::Receiver<()>,
 }
 
-impl DanmakuClient {
+impl MessageClient {
     pub fn new(room_id: &str, window: Window, stop_signal_rx: oneshot::Receiver<()>) -> Self {
         Self {
             room_id: room_id.to_string(),
@@ -97,7 +97,7 @@ impl DanmakuClient {
         loop {
             tokio::select! {
                 _ = &mut stop_rx => {
-                    eprintln!("[Douyu Danmaku {}] Stop signal received, terminating listener.", room_id_clone);
+                    eprintln!("[Douyu Message {}] Stop signal received, terminating listener.", room_id_clone);
                     break;
                 }
                 msg_option = read.next() => {
@@ -121,14 +121,14 @@ impl DanmakuClient {
                                 }
                             }
 
-                            let event_name = format!("danmaku-{}", room_id_clone);
+                            let event_name = format!("message-{}", room_id_clone);
 
                             if result.get("type").map_or(false, |t| t == "chatmsg") {
                                 let unknown = "unknown".to_string();
                                 let empty = "".to_string();
                                 let zero = "0".to_string();
 
-                                let danmaku = serde_json::json!({
+                                let message = serde_json::json!({
                                     "type": "chatmsg",
                                     "nickname": result.get("nn").unwrap_or(&unknown),
                                     "content": result.get("txt").unwrap_or(&empty),
@@ -139,12 +139,12 @@ impl DanmakuClient {
                                     "room_id": room_id_clone.clone()
                                 });
 
-                                let _ = window.emit(&event_name, danmaku);
+                                let _ = window.emit(&event_name, message);
 
-                                // 统一向前端发送通用弹幕事件，便于跨平台 DanmuList 使用
+                                // 统一向前端发送通用消息事件，便于跨平台 MessageList 使用
                                 let _ = window.emit(
-                                    "danmaku-message",
-                                    shared::DanmakuFrontendPayload {
+                                    "message",
+                                    shared::MessageFrontendPayload {
                                         room_id: room_id_clone.clone(),
                                         user: result.get("nn").unwrap_or(&unknown).to_string(),
                                         content: result.get("txt").unwrap_or(&empty).to_string(),
@@ -178,7 +178,7 @@ impl DanmakuClient {
                             }
                         }
                         Some(Ok(Message::Close(_))) | Some(Err(_)) | None => {
-                            eprintln!("[Douyu Danmaku {}] Websocket closed or error, terminating listener.", room_id_clone);
+                            eprintln!("[Douyu Message {}] Websocket closed or error, terminating listener.", room_id_clone);
                             break;
                         }
                         _ => {}
@@ -187,7 +187,7 @@ impl DanmakuClient {
             }
         }
         send_task.abort();
-        eprintln!("[Douyu Danmaku {}] Listener stopped.", room_id_clone);
+        eprintln!("[Douyu Message {}] Listener stopped.", room_id_clone);
         Ok(())
     }
 }

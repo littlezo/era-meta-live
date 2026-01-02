@@ -30,12 +30,12 @@ pub async fn get_douyin_live_stream_url_with_quality(
 }
 
 #[tauri::command]
-pub async fn start_douyin_danmu_listener(
+pub async fn start_douyin_message_listener(
     payload: GetStreamUrlPayload,
     app_handle: AppHandle,
-    state: State<'_, platforms::shared::DouyinDanmakuState>,
+    state: State<'_, platforms::shared::DouyinMessageState>,
 ) -> Result<(), String> {
-    platforms::douyin::douyin_danmu_listener::start_douyin_danmu_listener(
+    platforms::douyin::douyin_message_listener::start_douyin_message_listener(
         payload,
         app_handle,
         state,

@@ -12,7 +12,7 @@ use platforms;
 mod platform_commands;
 mod proxy;
 mod watch;
-use platforms::shared::{DouyinDanmakuState, FollowHttpClient, HuyaDanmakuState};
+use platforms::shared::{DouyinMessageState, FollowHttpClient, HuyaMessageState, BilibiliMessageState};
 // use platforms::huya::get_huya_stream_url_with_quality; // removed in favor of unified cmd
 
 use tauri::Manager;
@@ -30,9 +30,9 @@ pub struct StreamUrlStore {
     pub url: Arc<Mutex<String>>,
 }
 
-// State for managing Douyu danmaku listener handles (stop signals)
+// State for managing Douyu message listener handles (stop signals)
 #[derive(Default, Clone)]
-pub struct DouyuDanmakuHandles(Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>);
+pub struct DouyuMessageHandles(Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>);
 
 #[tauri::command]
 async fn get_stream_url_cmd(room_id: String) -> Result<String, String> {
@@ -81,20 +81,20 @@ async fn set_stream_url_cmd(
     Ok(())
 }
 
-// Command to start Douyu danmaku listener
+// Command to start Douyu message listener
 #[tauri::command]
-async fn start_danmaku_listener(
+async fn start_message_listener(
     room_id: String,
     window: tauri::Window,
-    danmaku_handles: tauri::State<'_, DouyuDanmakuHandles>,
+    message_handles: tauri::State<'_, DouyuMessageHandles>,
 ) -> Result<(), String> {
     // If a listener for this room_id already exists, stop it first.
-    if let Some(existing_sender) = danmaku_handles.0.lock().unwrap().remove(&room_id) {
+    if let Some(existing_sender) = message_handles.0.lock().unwrap().remove(&room_id) {
         let _ = existing_sender.send(());
     }
 
     let (stop_tx, stop_rx) = oneshot::channel();
-    danmaku_handles
+    message_handles
         .0
         .lock()
         .unwrap()
@@ -103,14 +103,14 @@ async fn start_danmaku_listener(
     let window_clone = window.clone();
     let room_id_clone = room_id.clone();
     tokio::spawn(async move {
-        let mut client = platforms::douyu::danmu_start::DanmakuClient::new(
+        let mut client = platforms::douyu::message_start::MessageClient::new(
             &room_id_clone,
             window_clone,
             stop_rx, // Pass the receiver part of the oneshot channel
         );
         if let Err(e) = client.start().await {
             eprintln!(
-                "[Rust Main] Douyu danmaku client for room {} failed: {}",
+                "[Rust Main] Douyu message client for room {} failed: {}",
                 room_id_clone, e
             );
         }
@@ -119,17 +119,17 @@ async fn start_danmaku_listener(
     Ok(())
 }
 
-// Command to stop Douyu danmaku listener
+// Command to stop Douyu message listener
 #[tauri::command]
-async fn stop_danmaku_listener(
+async fn stop_message_listener(
     room_id: String,
-    danmaku_handles: tauri::State<'_, DouyuDanmakuHandles>,
+    message_handles: tauri::State<'_, DouyuMessageHandles>,
 ) -> Result<(), String> {
-    if let Some(sender) = danmaku_handles.0.lock().unwrap().remove(&room_id) {
+    if let Some(sender) = message_handles.0.lock().unwrap().remove(&room_id) {
         match sender.send(()) {
             Ok(_) => Ok(()),
             Err(_) => Err(format!(
-                "Failed to stop Douyu danmaku listener for room {}: receiver dropped.",
+                "Failed to stop Douyu message listener for room {}: receiver dropped.",
                 room_id
             )),
         }
@@ -195,10 +195,10 @@ fn main() {
         })
         .manage(client) // Manage the reqwest client
         .manage(follow_http_client) // 专用关注刷新客户端，避免占用默认连接池
-        .manage(DouyuDanmakuHandles::default()) // Manage new DouyuDanmakuHandles
-        .manage(DouyinDanmakuState::default()) // Manage DouyinDanmakuState
-        .manage(HuyaDanmakuState::default()) // Manage HuyaDanmakuState
-        .manage(platforms::shared::BilibiliDanmakuState::default()) // Manage BilibiliDanmakuState
+        .manage(DouyuMessageHandles::default()) // Manage new DouyuMessageHandles
+        .manage(DouyinMessageState::default()) // Manage DouyinMessageState
+        .manage(HuyaMessageState::default()) // Manage HuyaMessageState
+        .manage(BilibiliMessageState::default()) // Manage BilibiliMessageState
         .manage(StreamUrlStore::default())
         .manage(proxy::ProxyServerHandle::default())
         .manage(platforms::bilibili::state::BilibiliState::default())
@@ -209,15 +209,15 @@ fn main() {
             get_stream_url_with_quality_cmd,
             set_stream_url_cmd,
             search_anchor,
-            start_danmaku_listener,      // Douyu danmaku start
-            stop_danmaku_listener,       // Douyu danmaku stop
+            start_message_listener,      // Douyu message start
+            stop_message_listener,       // Douyu message stop
             
             // Platform commands (wrapped from platforms crate)
             // Only include commands that are actually used by the frontend
             // Douyin commands - these are the ones causing errors in the frontend
             platform_commands::fetch_douyin_streamer_info,
             platform_commands::get_douyin_live_stream_url_with_quality,
-            platform_commands::start_douyin_danmu_listener,
+            platform_commands::start_douyin_message_listener,
             
             // Proxy commands
             proxy::start_proxy,

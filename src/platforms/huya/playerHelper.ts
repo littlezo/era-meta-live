@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type Event as TauriEvent } from '@tauri-apps/api/event';
 import { Ref } from 'vue';
-import type { DanmakuMessage, DanmuOverlayInstance, DanmuRenderOptions } from '../../components/player/types';
+import type { Message, MessageOverlayInstance, MessageRenderOptions } from '../../components/player/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface HuyaUnifiedEntry { quality: string; bitRate: number; url: string; }
@@ -41,7 +41,7 @@ export async function getHuyaStreamConfig(
 }
 
 // 统一的 Rust 弹幕事件负载（与 Douyin/Douyu 保持一致）
-interface UnifiedRustDanmakuPayload {
+interface UnifiedRustMessagePayload {
   room_id: string;
   user: string;
   content: string;
@@ -50,36 +50,37 @@ interface UnifiedRustDanmakuPayload {
 }
 let currentHuyaRoomId: string | null = null;
 
-export async function startHuyaDanmakuListener(
+export async function startHuyaMessageListener(
   roomId: string,
-  danmuOverlay: DanmuOverlayInstance | null,
-  danmakuMessagesRef: Ref<DanmakuMessage[]>,
-  renderOptions?: DanmuRenderOptions
+  messageOverlay: MessageOverlayInstance | null,
+  messageMessagesRef: Ref<Message[]>,
+  renderOptions?: MessageRenderOptions
 ): Promise<() => void> {
-  console.log('[HuyaPlayerHelper] Starting Huya danmaku listener for room:', roomId);
+  console.log('[HuyaPlayerHelper] Starting Huya message listener for room:', roomId);
   currentHuyaRoomId = roomId;
   
   try {
-    // 调用后端虎牙弹幕监听命令
-    await invoke('start_huya_danmaku_listener', { payload: { args: { room_id_str: roomId } } });
-    console.log('[HuyaPlayerHelper] Backend Huya danmaku listener started');
+    await invoke('start_huya_message_listener', {
+      payload: { args: { room_id_str: roomId } },
+    });
+    console.log('[HuyaPlayerHelper] Backend Huya message listener started');
   } catch (error) {
-    console.error('[HuyaPlayerHelper] Failed to start backend Huya danmaku listener:', error);
+    console.error('[HuyaPlayerHelper] Failed to start backend Huya message listener:', error);
     throw error;
   }
 
   // 监听弹幕事件
-  const eventName = 'danmaku-message';
+  const eventName = 'message';
   
-  const unlisten = await listen<UnifiedRustDanmakuPayload>(eventName, (event: TauriEvent<UnifiedRustDanmakuPayload>) => {
-    console.log('[HuyaPlayerHelper] Received danmaku event:', event.payload);
+  const unlisten = await listen<UnifiedRustMessagePayload>(eventName, (event: TauriEvent<UnifiedRustMessagePayload>) => {
+    console.log('[HuyaPlayerHelper] Received message event:', event.payload);
     
-    // 只处理当前房间的弹幕（后端 payload 字段为 room_id/user/content/...）
+    // 只处理当前房间的消息（后端 payload 字段为 room_id/user/content/...）
     if (!event.payload || event.payload.room_id !== roomId) {
       return;
     }
 
-    const frontendDanmaku: DanmakuMessage = {
+    const frontendMessage: Message = {
       id: uuidv4(),
       nickname: event.payload.user || '未知用户',
       content: event.payload.content,
@@ -90,14 +91,14 @@ export async function startHuyaDanmakuListener(
 
     const shouldDisplay = renderOptions?.shouldDisplay ? renderOptions.shouldDisplay() : true;
 
-    if (shouldDisplay && danmuOverlay?.sendComment) {
+    if (shouldDisplay && messageOverlay?.sendComment) {
       try {
-        const commentOptions = renderOptions?.buildCommentOptions?.(frontendDanmaku) ?? {};
+        const commentOptions = renderOptions?.buildCommentOptions?.(frontendMessage) ?? {};
         const styleFromOptions = commentOptions.style ?? {};
-        const preferredColor = styleFromOptions.color || (frontendDanmaku as any).color || '#FFFFFF';
-        danmuOverlay.sendComment({
-          id: frontendDanmaku.id,
-          txt: frontendDanmaku.content,
+        const preferredColor = styleFromOptions.color || (frontendMessage as any).color || '#FFFFFF';
+        messageOverlay.sendComment({
+          id: frontendMessage.id,
+          txt: frontendMessage.content,
           duration: commentOptions.duration ?? 12000,
           mode: commentOptions.mode ?? 'scroll',
           style: {
@@ -106,14 +107,14 @@ export async function startHuyaDanmakuListener(
           },
         });
       } catch (emitError) {
-        console.warn('[HuyaPlayerHelper] Failed emitting danmu.js comment:', emitError);
+        console.warn('[HuyaPlayerHelper] Failed emitting message comment:', emitError);
       }
     }
 
-    // 添加到弹幕消息列表
-    danmakuMessagesRef.value.push(frontendDanmaku);
-    if (danmakuMessagesRef.value.length > 200) {
-      danmakuMessagesRef.value.splice(0, danmakuMessagesRef.value.length - 200);
+    // 添加到消息列表
+    messageMessagesRef.value.push(frontendMessage);
+    if (messageMessagesRef.value.length > 200) {
+      messageMessagesRef.value.splice(0, messageMessagesRef.value.length - 200);
     }
   });
 
@@ -122,25 +123,25 @@ export async function startHuyaDanmakuListener(
   return unlisten;
 }
 
-export async function stopHuyaDanmaku(currentUnlistenFn: (() => void) | null): Promise<void> {
+export async function stopHuyaMessage(currentUnlistenFn: (() => void) | null): Promise<void> {
   if (currentUnlistenFn) {
     try { 
       currentUnlistenFn(); 
       console.log('[HuyaPlayerHelper] Event listener unregistered');
     } catch (e) { 
-      console.warn('[HuyaPlayerHelper] stopHuyaDanmaku cleanup error:', e); 
+      console.warn('[HuyaPlayerHelper] stopHuyaMessage cleanup error:', e); 
     }
   }
   
-  // 停止后端虎牙弹幕监听
+  // 停止后端虎牙消息监听
   try {
     const roomIdToStop = currentHuyaRoomId || '';
-    await invoke('stop_huya_danmaku_listener', { roomId: roomIdToStop });
+    await invoke('stop_huya_message_listener', { roomId: roomIdToStop });
   } catch (e) {
-    console.warn('[HuyaPlayerHelper] stopHuyaDanmaku: backend stop encountered error (ignored):', e);
+    console.warn('[HuyaPlayerHelper] stopHuyaMessage: backend stop encountered error (ignored):', e);
   }
   currentHuyaRoomId = null;
-  console.log('[HuyaPlayerHelper] Huya danmaku stopped');
+  console.log('[HuyaPlayerHelper] Huya message stopped');
 }
 
 function pickHuyaUrlByQuality(entries: HuyaUnifiedEntry[], quality: string): string | undefined {

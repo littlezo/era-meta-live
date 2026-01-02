@@ -3,14 +3,14 @@ use tauri::Emitter;
 use tokio::sync::mpsc as tokio_mpsc;
 
 #[tauri::command]
-pub async fn start_douyin_danmu_listener(
+pub async fn start_douyin_message_listener(
     payload: shared::GetStreamUrlPayload,
     app_handle: tauri::AppHandle,
-    state: tauri::State<'_, shared::DouyinDanmakuState>,
+    state: tauri::State<'_, shared::DouyinMessageState>,
 ) -> Result<(), String> {
     let room_id_or_url = payload.args.room_id_str;
     println!(
-        "[Douyin Danmaku] Received request for room_id_or_url: {}",
+        "[Douyin Message] Received request for room_id_or_url: {}",
         room_id_or_url
     );
 
@@ -20,15 +20,13 @@ pub async fn start_douyin_danmu_listener(
     };
 
     if let Some(tx) = previous_tx {
-        println!("[Douyin Danmaku] Sending shutdown to previous Douyin listener task.");
-        if tx.send(()).await.is_err() {
-            eprintln!("[Douyin Danmaku] Failed to send shutdown. Task might have already completed or panicked.");
-        }
+        println!("[Douyin Message] Sending shutdown to previous Douyin listener task.");
+        let _ = tx.send(()).await;
     }
 
     if room_id_or_url == "stop_listening" {
         println!(
-            "[Douyin Danmaku] Received stop_listening signal. Listener will not be restarted."
+            "[Douyin Message] Received stop_listening signal. Listener will not be restarted."
         );
         return Ok(());
     }
@@ -46,7 +44,7 @@ pub async fn start_douyin_danmu_listener(
 
     tokio::spawn(async move {
         println!(
-            "[Douyin Danmaku] Spawning listener for room: {}",
+            "[Douyin Message] Spawning listener for room: {}",
             room_id_str_clone
         );
 
@@ -54,7 +52,7 @@ pub async fn start_douyin_danmu_listener(
             let mut attempt: u32 = 1;
             loop {
                 let attempt_result = async {
-                    let mut fetcher = crate::danmu::web_fetcher::DouyinLiveWebFetcher::new(&room_id_str_clone)?;
+                    let mut fetcher = crate::message::web_fetcher::DouyinLiveWebFetcher::new(&room_id_str_clone)?;
                     fetcher
                         .fetch_room_details()
                         .await
@@ -64,11 +62,11 @@ pub async fn start_douyin_danmu_listener(
                     let cookie_header = fetcher.get_dy_cookie().await?;
                     let user_unique_id = fetcher.get_user_unique_id().await?;
                     println!(
-                        "[Douyin Danmaku] Using: room_id={}, user_unique_id={}",
+                        "[Douyin Message] Using: room_id={}, user_unique_id={}",
                         actual_room_id, user_unique_id
                     );
 
-                    let (read_stream, ack_tx) = crate::danmu::websocket_connection::connect_and_manage_websocket(
+                    let (read_stream, ack_tx) = crate::message::websocket_connection::connect_and_manage_websocket(
                         &fetcher,
                         &actual_room_id,
                         &cookie_header,
@@ -77,12 +75,12 @@ pub async fn start_douyin_danmu_listener(
                     .await?;
 
                     println!(
-                        "[Douyin Danmaku] WebSocket connected for room: {}",
+                        "[Douyin Message] WebSocket connected for room: {}",
                         actual_room_id
                     );
 
                     tokio::select! {
-                        res = crate::danmu::message_handler::handle_received_messages(
+                        res = crate::message::message_handler::handle_received_messages(
                             read_stream,
                             ack_tx,
                             app_handle_clone.clone(),
@@ -94,7 +92,7 @@ pub async fn start_douyin_danmu_listener(
                         }
                         _ = rx_shutdown.recv() => {
                             println!(
-                                "[Douyin Danmaku] Received shutdown signal for room {}.",
+                                "[Douyin Message] Received shutdown signal for room {}.",
                                 actual_room_id
                             );
                         }
@@ -108,11 +106,11 @@ pub async fn start_douyin_danmu_listener(
                     Ok(_) => break Ok(()),
                     Err(e) => {
                         if attempt >= 2 {
-                            eprintln!("[Douyin Danmaku] Listener connect/fetch failed after {} attempts: {}", attempt, e);
+                            eprintln!("[Douyin Message] Listener connect/fetch failed after {} attempts: {}", attempt, e);
                             break Err(e);
                         } else {
                             eprintln!(
-                                "[Douyin Danmaku WARN] Attempt {} failed: {}. Retrying...",
+                                "[Douyin Message WARN] Attempt {} failed: {}. Retrying...",
                                 attempt, e
                             );
                             attempt += 1;
@@ -125,25 +123,25 @@ pub async fn start_douyin_danmu_listener(
 
         if let Err(e) = task_result {
             eprintln!(
-                "[Douyin Danmaku] Listener task for room {} critically failed: {}",
+                "[Douyin Message] Listener task for room {} critically failed: {}",
                 room_id_str_clone, e
             );
-            let error_payload = shared::DanmakuFrontendPayload {
+            let error_payload = shared::MessageFrontendPayload {
                 room_id: room_id_str_clone.clone(),
                 user: "系统消息".to_string(),
                 content: format!("弹幕连接发生错误: {}", e),
                 user_level: 0,
                 fans_club_level: 0,
             };
-            if let Err(emit_err) = app_handle.emit("danmaku-message", error_payload) {
+            if let Err(emit_err) = app_handle.emit("message", error_payload) {
                 eprintln!(
-                    "[Douyin Danmaku] Failed to emit error event to frontend: {}",
+                    "[Douyin Message] Failed to emit error event to frontend: {}",
                     emit_err
                 );
             }
         } else {
             println!(
-                "[Douyin Danmaku] Listener task for room {} completed.",
+                "[Douyin Message] Listener task for room {} completed.",
                 room_id_str_clone
             );
         }

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type Event as TauriEvent } from '@tauri-apps/api/event';
 import type { LiveStreamInfo, StreamVariant } from '../common/types';
 import type { Ref } from 'vue';
-import type { DanmakuMessage, DanmuOverlayInstance, DanmuRenderOptions } from '../../components/player/types';
+import type { Message, MessageOverlayInstance, MessageRenderOptions } from '../../components/player/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function getBilibiliStreamConfig(
@@ -109,8 +109,8 @@ export async function getBilibiliStreamConfig(
   return { streamUrl: result.stream_url, streamType };
 }
 
-// 统一的 Rust 弹幕事件负载（与 Douyin/Douyu/Huya 保持一致）
-interface UnifiedRustDanmakuPayload {
+// 统一的 Rust 消息事件负载（与 Douyin/Douyu/Huya 保持一致）
+interface UnifiedRustMessagePayload {
   room_id: string;
   user: string;
   content: string;
@@ -118,25 +118,25 @@ interface UnifiedRustDanmakuPayload {
   fans_club_level: number;
 }
 
-export async function startBilibiliDanmakuListener(
+export async function startBilibiliMessageListener(
   roomId: string,
-  danmuOverlay: DanmuOverlayInstance | null,
-  danmakuMessagesRef: Ref<DanmakuMessage[]>,
+  messageOverlay: MessageOverlayInstance | null,
+  messageMessagesRef: Ref<Message[]>,
   cookie?: string,
-  renderOptions?: DanmuRenderOptions,
+  renderOptions?: MessageRenderOptions,
 ): Promise<() => void> {
-  // 启动后端 B 站弹幕监听（cookie 可选）；若未传，则从 localStorage 兜底读取
+  // 启动后端 B 站消息监听（cookie 可选）；若未传，则从 localStorage 兜底读取
   const effectiveCookie = cookie ?? (typeof localStorage !== 'undefined' ? (localStorage.getItem('bilibili_cookie') || undefined) : undefined);
-  await invoke('start_bilibili_danmaku_listener', {
+  await invoke('start_bilibili_message_listener', {
     payload: { args: { room_id_str: roomId } },
     cookie: effectiveCookie || null,
   });
 
-  const eventName = 'danmaku-message';
-  const unlisten = await listen<UnifiedRustDanmakuPayload>(eventName, (event: TauriEvent<UnifiedRustDanmakuPayload>) => {
+  const eventName = 'message';
+  const unlisten = await listen<UnifiedRustMessagePayload>(eventName, (event: TauriEvent<UnifiedRustMessagePayload>) => {
     if (!event.payload || event.payload.room_id !== roomId) return;
 
-    const frontendDanmaku: DanmakuMessage = {
+    const frontendMessage: Message = {
       id: uuidv4(),
       nickname: event.payload.user || '未知用户',
       content: event.payload.content,
@@ -147,14 +147,14 @@ export async function startBilibiliDanmakuListener(
 
     const shouldDisplay = renderOptions?.shouldDisplay ? renderOptions.shouldDisplay() : true;
 
-    if (shouldDisplay && danmuOverlay?.sendComment) {
+    if (shouldDisplay && messageOverlay?.sendComment) {
       try {
-        const commentOptions = renderOptions?.buildCommentOptions?.(frontendDanmaku) ?? {};
+        const commentOptions = renderOptions?.buildCommentOptions?.(frontendMessage) ?? {};
         const styleFromOptions = commentOptions.style ?? {};
-        const preferredColor = styleFromOptions.color || (frontendDanmaku as any).color || '#FFFFFF';
-        danmuOverlay.sendComment({
-          id: frontendDanmaku.id,
-          txt: frontendDanmaku.content,
+        const preferredColor = styleFromOptions.color || (frontendMessage as any).color || '#FFFFFF';
+        messageOverlay.sendComment({
+          id: frontendMessage.id,
+          txt: frontendMessage.content,
           duration: commentOptions.duration ?? 12000,
           mode: commentOptions.mode ?? 'scroll',
           style: {
@@ -163,23 +163,23 @@ export async function startBilibiliDanmakuListener(
           },
         });
       } catch (emitError) {
-        console.warn('[BilibiliPlayerHelper] Failed emitting danmu.js comment:', emitError);
+        console.warn('[BilibiliPlayerHelper] Failed emitting message comment:', emitError);
       }
     }
 
-    danmakuMessagesRef.value.push(frontendDanmaku);
-    if (danmakuMessagesRef.value.length > 200) {
-      danmakuMessagesRef.value.splice(0, danmakuMessagesRef.value.length - 200);
+    messageMessagesRef.value.push(frontendMessage);
+    if (messageMessagesRef.value.length > 200) {
+      messageMessagesRef.value.splice(0, messageMessagesRef.value.length - 200);
     }
   });
   return unlisten;
 }
 
-export async function stopBilibiliDanmaku(currentUnlistenFn: (() => void) | null): Promise<void> {
+export async function stopBilibiliMessage(currentUnlistenFn: (() => void) | null): Promise<void> {
   if (currentUnlistenFn) {
     try { currentUnlistenFn(); } catch {}
   }
   try {
-    await invoke('stop_bilibili_danmaku_listener');
+    await invoke('stop_bilibili_message_listener');
   } catch {}
 }

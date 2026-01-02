@@ -8,7 +8,7 @@
 - **后端**: Rust + Tauri 2.x
 - **数据库**: SQLite、MySQL、PostgreSQL
 - **UI组件**: Radix Vue + 自定义组件
-- **弹幕库**: danmu.js
+- **消息库**: danmu.js
 
 
 ## 📊 功能模块规划
@@ -117,17 +117,17 @@ database = "era_meta_live"
 
 #### 3.1 消息入库服务实现方案
 **技术实现细节**:
-- **事件监听机制**: 通过监听 `danmaku-message` 事件接收弹幕消息
+- **事件监听机制**: 通过监听 `message` 事件接收消息
 - **异步任务处理**: 使用 `tokio::sync::mpsc` 通道实现异步消息队列
 - **消息服务架构**: `MessageService` 负责接收和分发消息到数据库
 - **错误处理**: 完善的错误处理和重试机制，确保消息不丢失
 
 **消息处理流程**:
 1. 各平台弹幕处理模块监听 WebSocket 消息
-2. 解析弹幕消息并构造 `DanmakuMessage` 对象
+2. 解析弹幕消息并构造 `MessageMessage` 对象
 3. 调用 `msg_service.submit(msg).await` 提交消息到队列
 4. `MessageService` 异步处理消息入库
-5. 同时通过 `app_handle.emit("danmaku-message", payload)` 发送到前端
+5. 同时通过 `app_handle.emit("message", payload)` 发送到前端
 
 **数据库操作**:
 - 使用 `MessageDao` 和 `UserDao` 进行数据库操作

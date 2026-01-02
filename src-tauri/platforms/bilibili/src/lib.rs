@@ -1,5 +1,5 @@
 pub mod cookie;
-pub mod danmaku;
+pub mod message;
 pub mod live_list;
 pub mod state;
 pub mod stream_url;

@@ -8,7 +8,7 @@ export const arrangeControlClusters = (player: Player | null) => {
   const run = () => {
     try {
       groupPrimaryControls(root);
-      groupDanmuControls(root);
+      groupMessageControls(root);
     } catch (error) {
       console.warn('[Player] Failed to arrange player controls:', error);
     }
@@ -44,20 +44,20 @@ export const groupPrimaryControls = (root: HTMLElement) => {
   });
 };
 
-export const groupDanmuControls = (root: HTMLElement) => {
+export const groupMessageControls = (root: HTMLElement) => {
   const rightControls = root.querySelector('.xgplayer-controls-right');
   if (!rightControls) {
     return;
   }
-  const toggleEl = rightControls.querySelector('.xgplayer-danmu-toggle');
-  const settingsEl = rightControls.querySelector('.xgplayer-danmu-settings');
+  const toggleEl = rightControls.querySelector('.xgplayer-message-toggle');
+  const settingsEl = rightControls.querySelector('.xgplayer-message-settings');
   if (!(toggleEl instanceof HTMLElement) || !(settingsEl instanceof HTMLElement)) {
     return;
   }
-  let cluster = rightControls.querySelector<HTMLElement>('.danmu-control-group');
+  let cluster = rightControls.querySelector<HTMLElement>('.message-control-group');
   if (!cluster) {
     cluster = document.createElement('div');
-    cluster.className = 'danmu-control-group';
+    cluster.className = 'message-control-group';
     rightControls.insertBefore(cluster, toggleEl);
   }
   if (toggleEl.parentElement !== cluster) {

@@ -2,14 +2,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type Event as TauriEvent } from '@tauri-apps/api/event';
 import { Ref } from 'vue';
 import { Platform } from '../common/types';
-import type { DanmakuMessage, DanmuOverlayInstance, DanmuRenderOptions, RustGetStreamUrlPayload } from '../../components/player/types';
+import type { Message, MessageOverlayInstance, MessageRenderOptions, RustGetStreamUrlPayload } from '../../components/player/types';
 import type { LiveStreamInfo } from '../common/types';
 import { v4 as uuidv4 } from 'uuid';
 
 
-export interface DouyinRustDanmakuPayload {
+export interface DouyinRustMessagePayload {
   room_id?: string; 
-  user: string;      // Nickname from Rust's DanmakuFrontendPayload
+  user: string;      // Nickname from Rust's MessageFrontendPayload
   content: string;
   user_level: number; // from Rust's i64
   fans_club_level: number; // from Rust's i32
@@ -110,25 +110,25 @@ function normalizeDouyinQuality(input: string): string {
   return 'OD';
 }
 
-export async function startDouyinDanmakuListener(
+export async function startDouyinMessageListener(
   roomId: string,
-  danmuOverlay: DanmuOverlayInstance | null, // For emitting danmaku to overlay
-  danmakuMessagesRef: Ref<DanmakuMessage[]>, // For updating DanmuList
-  renderOptions?: DanmuRenderOptions
+  messageOverlay: MessageOverlayInstance | null, // For emitting message to overlay
+  messageMessagesRef: Ref<Message[]>, // For updating MessageList
+  renderOptions?: MessageRenderOptions
 ): Promise<() => void> {
   
   const rustPayload: RustGetStreamUrlPayload = { 
     args: { room_id_str: roomId }, 
     platform: Platform.DOUYIN, 
   };
-  await invoke('start_douyin_danmu_listener', { payload: rustPayload });
+  await invoke('start_douyin_message_listener', { payload: rustPayload });
   
-  const eventName = 'danmaku-message';
+  const eventName = 'message';
 
-  const unlisten = await listen<DouyinRustDanmakuPayload>(eventName, (event: TauriEvent<DouyinRustDanmakuPayload>) => {
+  const unlisten = await listen<DouyinRustMessagePayload>(eventName, (event: TauriEvent<DouyinRustMessagePayload>) => {
     if (event.payload) {
       const rustP = event.payload;
-      const frontendDanmaku: DanmakuMessage = {
+      const frontendMessage: Message = {
         id: uuidv4(),
         nickname: rustP.user || '未知用户',
         content: rustP.content || '',
@@ -139,14 +139,14 @@ export async function startDouyinDanmakuListener(
 
       const shouldDisplay = renderOptions?.shouldDisplay ? renderOptions.shouldDisplay() : true;
 
-      if (shouldDisplay && danmuOverlay?.sendComment) {
+      if (shouldDisplay && messageOverlay?.sendComment) {
         try {
-          const commentOptions = renderOptions?.buildCommentOptions?.(frontendDanmaku) ?? {};
+          const commentOptions = renderOptions?.buildCommentOptions?.(frontendMessage) ?? {};
           const styleFromOptions = commentOptions.style ?? {};
-          const preferredColor = styleFromOptions.color || frontendDanmaku.color || '#FFFFFF';
-          danmuOverlay.sendComment({
-            id: frontendDanmaku.id,
-            txt: frontendDanmaku.content,
+          const preferredColor = styleFromOptions.color || frontendMessage.color || '#FFFFFF';
+          messageOverlay.sendComment({
+            id: frontendMessage.id,
+            txt: frontendMessage.content,
             duration: commentOptions.duration ?? 12000,
             mode: commentOptions.mode ?? 'scroll',
             style: {
@@ -155,19 +155,19 @@ export async function startDouyinDanmakuListener(
             },
           });
         } catch (emitError) {
-          console.warn('[DouyinPlayerHelper] Failed emitting danmu.js comment:', emitError);
+          console.warn('[DouyinPlayerHelper] Failed emitting message comment:', emitError);
         }
       }
-      danmakuMessagesRef.value.push(frontendDanmaku);
-      if (danmakuMessagesRef.value.length > 200) { // Manage danmaku array size
-        danmakuMessagesRef.value.splice(0, danmakuMessagesRef.value.length - 200);
+      messageMessagesRef.value.push(frontendMessage);
+      if (messageMessagesRef.value.length > 200) { // Manage message array size
+        messageMessagesRef.value.splice(0, messageMessagesRef.value.length - 200);
       }
     }
   });
   return unlisten;
 }
 
-export async function stopDouyinDanmaku(currentUnlistenFn: (() => void) | null): Promise<void> {
+export async function stopDouyinMessage(currentUnlistenFn: (() => void) | null): Promise<void> {
   if (currentUnlistenFn) {
     currentUnlistenFn();
   }
@@ -176,9 +176,9 @@ export async function stopDouyinDanmaku(currentUnlistenFn: (() => void) | null):
       args: { room_id_str: "stop_listening" }, 
       platform: Platform.DOUYIN, 
     };
-    await invoke('start_douyin_danmu_listener', { payload: rustPayload });
+    await invoke('start_douyin_message_listener', { payload: rustPayload });
   } catch (error) {
-    console.error('[DouyinPlayerHelper] Error stopping Douyin danmaku listener:', error);
+    console.error('[DouyinPlayerHelper] Error stopping Douyin message listener:', error);
   }
 }
 

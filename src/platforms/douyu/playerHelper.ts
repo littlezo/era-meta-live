@@ -1,11 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type Event as TauriEvent } from '@tauri-apps/api/event';
 import { Ref } from 'vue';
-import type { DanmakuMessage, DanmuOverlayInstance, DanmuRenderOptions } from '../../components/player/types';
+import type { Message, MessageOverlayInstance, MessageRenderOptions } from '../../components/player/types';
 import { v4 as uuidv4 } from 'uuid';
 
-// 统一的 Rust 弹幕事件负载（与 Douyin/Huya 保持一致）
-export interface UnifiedRustDanmakuPayload {
+// 统一的 Rust 消息事件负载（与 Douyin/Huya 保持一致）
+export interface UnifiedRustMessagePayload {
   room_id?: string;
   user: string;
   content: string;
@@ -79,25 +79,25 @@ export async function getDouyuStreamConfig(
   }
 }
 
-export async function startDouyuDanmakuListener(
+export async function startDouyuMessageListener(
   roomId: string,
-  danmuOverlay: DanmuOverlayInstance | null,
-  danmakuMessagesRef: Ref<DanmakuMessage[]>,
-  renderOptions?: DanmuRenderOptions
+  messageOverlay: MessageOverlayInstance | null,
+  messageMessagesRef: Ref<Message[]>,
+  renderOptions?: MessageRenderOptions
 ): Promise<() => void> {
 
-  await invoke('start_danmaku_listener', { roomId });
+  await invoke('start_message_listener', { roomId });
   
-  const eventName = 'danmaku-message';
+  const eventName = 'message';
 
-  const unlisten = await listen<UnifiedRustDanmakuPayload>(eventName, (event: TauriEvent<UnifiedRustDanmakuPayload>) => {
+  const unlisten = await listen<UnifiedRustMessagePayload>(eventName, (event: TauriEvent<UnifiedRustMessagePayload>) => {
     if (event.payload) {
       const rustP = event.payload;
 
       // 仅处理当前 roomId 的消息，避免跨房间干扰
       if (rustP.room_id && rustP.room_id !== roomId) return;
 
-      const frontendDanmaku: DanmakuMessage = {
+      const frontendMessage: Message = {
         id: uuidv4(),
         nickname: rustP.user || '未知用户',
         content: rustP.content || '',
@@ -108,16 +108,15 @@ export async function startDouyuDanmakuListener(
 
       const shouldDisplay = renderOptions?.shouldDisplay ? renderOptions.shouldDisplay() : true;
 
-      if (shouldDisplay && danmuOverlay?.sendComment) {
+      if (shouldDisplay && messageOverlay?.sendComment) {
         try {
-          const commentOptions = renderOptions?.buildCommentOptions?.(frontendDanmaku) ?? {};
+          const commentOptions = renderOptions?.buildCommentOptions?.(frontendMessage) ?? {};
           const styleFromOptions = commentOptions.style ?? {};
-          const preferredColor = styleFromOptions.color || frontendDanmaku.color || '#FFFFFF';
-
-          danmuOverlay.sendComment({
-            id: frontendDanmaku.id,
-            txt: frontendDanmaku.content,
-            duration: commentOptions.duration ?? 12000,
+          const preferredColor = styleFromOptions.color || frontendMessage.color || '#FFFFFF';
+          messageOverlay.sendComment({
+            id: frontendMessage.id,
+            txt: frontendMessage.content,
+            duration: commentOptions.duration ?? 10000,
             mode: commentOptions.mode ?? 'scroll',
             style: {
               ...styleFromOptions,
@@ -125,12 +124,14 @@ export async function startDouyuDanmakuListener(
             },
           });
         } catch (emitError) {
-          console.warn('[DouyuPlayerHelper] Failed emitting danmu.js comment:', emitError);
+          console.warn('[DouyuPlayerHelper] Failed emitting message comment:', emitError);
         }
       }
-      danmakuMessagesRef.value.push(frontendDanmaku);
-      if (danmakuMessagesRef.value.length > 200) {
-        danmakuMessagesRef.value.splice(0, danmakuMessagesRef.value.length - 200);
+
+      // 发送到消息列表
+      messageMessagesRef.value.push(frontendMessage);
+      if (messageMessagesRef.value.length > 200) {
+        messageMessagesRef.value.splice(0, messageMessagesRef.value.length - 200);
       }
     }
   });
@@ -138,16 +139,16 @@ export async function startDouyuDanmakuListener(
   return unlisten;
 }
 
-export async function stopDouyuDanmaku(roomId: string, currentUnlistenFn: (() => void) | null): Promise<void> {
+export async function stopDouyuMessage(roomId: string, currentUnlistenFn: (() => void) | null): Promise<void> {
   if (currentUnlistenFn) {
     currentUnlistenFn();
   }
   try {
     if (roomId) { 
-        await invoke('stop_danmaku_listener', { roomId: roomId });
+        await invoke('stop_message_listener', { roomId: roomId });
     }
   } catch (error) {
-    console.error('[DouyuPlayerHelper] Error invoking stop_danmaku_listener for Douyu:', error);
+    console.error('[DouyuPlayerHelper] Error invoking stop_message_listener for Douyu:', error);
   }
 }
 
