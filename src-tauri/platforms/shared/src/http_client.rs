@@ -2,6 +2,7 @@ use reqwest::header::{HeaderMap as ReqwestHeaderMap, HeaderName, HeaderValue, US
 use reqwest::{cookie::Jar, Client, RequestBuilder, Response};
 use std::sync::Arc;
 use std::time::Duration;
+use log::{debug, error, info, warn};
 
 pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36";
 const DEFAULT_TIMEOUT_SECONDS: u64 = 20;
@@ -104,29 +105,35 @@ impl HttpClient {
     }
 
     async fn send_request(&self, request_builder: RequestBuilder) -> Result<Response, String> {
+        debug!("Sending HTTP request...");
         request_builder
             .headers(self.headers.clone())
             .send()
             .await
             .map_err(|e| {
-                println!("[HTTP_CLIENT ERROR] HTTP request failed: {}", e);
+                error!("HTTP request failed: {}", e);
                 format!("HTTP request execution failed: {}", e)
             })
     }
 
     pub async fn get(&self, url: &str) -> Result<Response, String> {
+        debug!("GET request: {}", url);
         let response = self.send_request(self.inner.get(url)).await?;
+        debug!("GET response received: status={}", response.status());
         Ok(response)
     }
 
     pub async fn get_text(&self, url: &str) -> Result<String, String> {
+        debug!("GET text request: {}", url);
         let response = self.get(url).await?;
         let status = response.status();
         let response_text = response
             .text()
             .await
             .map_err(|e| format!("Failed to read response body from {}: {}", url, e))?;
+        debug!("GET text response: status={}, length={} bytes", status, response_text.len());
         if !status.is_success() {
+            error!("GET {} failed with status {}: {}", url, status, response_text);
             return Err(format!(
                 "GET {} failed with status {}: {}",
                 url, status, response_text
@@ -135,27 +142,48 @@ impl HttpClient {
         Ok(response_text)
     }
 
-    pub async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+    /// 获取JSON响应并返回原始响应文本
+    pub async fn get_json_with_raw<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<(T, String), String> {
+        debug!("GET JSON with raw request: {}", url);
         let response = self.get(url).await?;
         let status = response.status();
+        
+        // 获取响应文本
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response body from {}: {}", url, e))?;
+        debug!("GET JSON with raw response: status={}, length={} bytes", status, response_text.len());
+        
         if !status.is_success() {
-            let err_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Failed to read error body".to_string());
+            error!("GET JSON {} failed with status {}: {}", url, status, response_text);
             return Err(format!(
                 "GET JSON {} failed with status {}: {}",
-                url, status, err_text
+                url, status, response_text
             ));
         }
-        let json_response = response
-            .json::<T>()
-            .await
-            .map_err(|e| format!("aFailed to parse JSON response from {}: {}", url, e))?;
-        Ok(json_response)
+        
+        // 检查响应文本是否为空
+        if response_text.trim().is_empty() {
+            error!("GET JSON {} returned empty response body", url);
+            return Err(format!("GET JSON {} returned empty response body", url));
+        }
+        
+        let json_response = serde_json::from_str(&response_text)
+            .map_err(|e| {
+                error!("Failed to parse JSON response from `{}`: {}", url, e);
+                error!("Response content: `{}`", response_text);
+                format!("Failed to parse JSON response from `{}`: {}", url, e)
+            })?;
+        Ok((json_response, response_text))
+    }
+    
+    pub async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+        self.get_json_with_raw(url).await.map(|(json, _)| json)
     }
 
     pub async fn post_form(&self, url: &str, form_data: &str) -> Result<Response, String> {
+        debug!("POST form request: {}, data={}", url, form_data);
         let response = self
             .send_request(
                 self.inner
@@ -164,38 +192,69 @@ impl HttpClient {
                     .body(form_data.to_string()),
             )
             .await?;
+        debug!("POST form response received: status={}", response.status());
         Ok(response)
     }
 
+    /// POST表单数据并获取JSON响应，同时返回原始响应文本
+    pub async fn post_form_json_with_raw<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+        form_data: &str,
+    ) -> Result<(T, String), String> {
+        debug!("POST form JSON with raw request: {}, data={}", url, form_data);
+        let response = self.post_form(url, form_data).await?;
+        let status = response.status();
+        
+        // 获取响应文本
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response body from {}: {}", url, e))?;
+        debug!("POST form JSON with raw response: status={}, length={} bytes", status, response_text.len());
+        
+        if !status.is_success() {
+            error!("POST FORM {} failed with status {}: {}", url, status, response_text);
+            return Err(format!(
+                "POST FORM {} failed with status {}: {}",
+                url, status, response_text
+            ));
+        }
+        
+        // 检查响应文本是否为空
+        if response_text.trim().is_empty() {
+            error!("POST form JSON {} returned empty response body", url);
+            return Err(format!("POST form JSON {} returned empty response body", url));
+        }
+        
+        let json_response = serde_json::from_str(&response_text)
+            .map_err(|e| {
+                error!("Failed to parse JSON response from `{}`: {}", url, e);
+                error!("Response content: `{}`", response_text);
+                format!("Failed to parse JSON response from `{}`: {}", url, e)
+            })?;
+        Ok((json_response, response_text))
+    }
+    
     pub async fn post_form_json<T: serde::de::DeserializeOwned>(
         &self,
         url: &str,
         form_data: &str,
     ) -> Result<T, String> {
-        let response = self.post_form(url, form_data).await?;
-        let status = response.status();
-        if !status.is_success() {
-            let err_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Failed to read error body".to_string());
-            return Err(format!(
-                "POST FORM {} failed with status {}: {}",
-                url, status, err_text
-            ));
-        }
-        let json_response = response
-            .json::<T>()
-            .await
-            .map_err(|e| format!("bFailed to parse JSON response from {}: {}", url, e))?;
-        Ok(json_response)
+        self.post_form_json_with_raw(url, form_data).await.map(|(json, _)| json)
     }
 
-    pub async fn get_json_with_headers<T: serde::de::DeserializeOwned>(
+    /// GET JSON响应，带自定义headers并返回原始响应文本
+    pub async fn get_json_with_headers_with_raw<T: serde::de::DeserializeOwned>(
         &self,
         url: &str,
         headers: Option<ReqwestHeaderMap>,
-    ) -> Result<T, String> {
+    ) -> Result<(T, String), String> {
+        debug!("GET JSON with headers with raw request: {}", url);
+        if let Some(h) = &headers {
+            debug!("Additional headers: {:?}", h);
+        }
+        
         let mut request_builder = self.inner.get(url);
 
         if let Some(additional_headers) = headers {
@@ -204,33 +263,63 @@ impl HttpClient {
 
         let response = self.send_request(request_builder).await?;
         let status = response.status();
+        debug!("GET JSON with headers with raw response: status={}", status);
+        
+        // 获取响应文本
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response body from {}: {}", url, e))?;
+        debug!("GET JSON with headers with raw response content: status={}, length={} bytes", status, response_text.len());
+        
         if !status.is_success() {
-            let err_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Failed to read error body".to_string());
+            error!("GET JSON {} failed with status {}: {}", url, status, response_text);
             return Err(format!(
                 "GET JSON {} failed with status {}: {}",
-                url, status, err_text
+                url, status, response_text
             ));
         }
-        let json_response = response
-            .json::<T>()
-            .await
-            .map_err(|e| format!("cFailed to parse JSON response from {}: {}", url, e))?;
-        Ok(json_response)
+        
+        // 检查响应文本是否为空
+        if response_text.trim().is_empty() {
+            error!("GET JSON {} returned empty response body", url);
+            return Err(format!("GET JSON {} returned empty response body", url));
+        }
+        
+        let json_response = serde_json::from_str(&response_text)
+            .map_err(|e| {
+                error!("Failed to parse JSON response from `{}`: {}", url, e);
+                error!("Response content: `{}`", response_text);
+                format!("Failed to parse JSON response from `{}`: {}", url, e)
+            })?;
+        Ok((json_response, response_text))
+    }
+    
+    pub async fn get_json_with_headers<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+        headers: Option<ReqwestHeaderMap>,
+    ) -> Result<T, String> {
+        self.get_json_with_headers_with_raw(url, headers).await.map(|(json, _)| json)
     }
 
     pub async fn get_with_cookies(&self, url: &str) -> Result<Response, String> {
+        debug!("GET with cookies request: {}", url);
         let request_builder = self.inner.get(url).headers(self.headers.clone());
         self.send_request(request_builder).await
     }
 
-    pub async fn get_text_with_headers(
+    /// GET文本响应，带自定义headers并返回原始响应文本（总是返回原始文本，无论成功失败）
+    pub async fn get_text_with_headers_with_raw(
         &self,
         url: &str,
         headers: Option<ReqwestHeaderMap>,
-    ) -> Result<String, String> {
+    ) -> Result<(String, String), String> {
+        debug!("GET text with headers with raw request: {}", url);
+        if let Some(h) = &headers {
+            debug!("Additional headers: {:?}", h);
+        }
+        
         let mut request_builder = self.inner.get(url).headers(self.headers.clone());
 
         if let Some(additional_headers) = headers {
@@ -239,21 +328,32 @@ impl HttpClient {
 
         let response = self.send_request(request_builder).await?;
         let status = response.status();
-        if !status.is_success() {
-            let err_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Failed to read error body".to_string());
-            return Err(format!(
-                "GET {} failed with status {}: {}",
-                url, status, err_text
-            ));
-        }
-        let text_response = response
+        debug!("GET text with headers with raw response: status={}", status);
+        
+        // 获取响应文本，无论成功失败
+        let response_text = response
             .text()
             .await
             .map_err(|e| format!("Failed to read text response from {}: {}", url, e))?;
-        Ok(text_response)
+        debug!("GET text with headers with raw response content: status={}, length={} bytes", status, response_text.len());
+        
+        if !status.is_success() {
+            error!("GET {} failed with status {}: {}", url, status, response_text);
+            return Err(format!(
+                "GET {} failed with status {}: {}",
+                url, status, response_text
+            ));
+        }
+        
+        Ok((response_text.clone(), response_text))
+    }
+    
+    pub async fn get_text_with_headers(
+        &self,
+        url: &str,
+        headers: Option<ReqwestHeaderMap>,
+    ) -> Result<String, String> {
+        self.get_text_with_headers_with_raw(url, headers).await.map(|(text, _)| text)
     }
 
     /// 获取当前设置的headers信息用于调试

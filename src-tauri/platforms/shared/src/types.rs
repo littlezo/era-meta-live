@@ -29,7 +29,7 @@ pub struct GetStreamUrlPayload {
 }
 
 // 描述一个可用的播放流变体（用于调试/导出所有地址）
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StreamVariant {
     pub url: String,
     pub format: Option<String>,   // e.g. flv, ts, mp4
@@ -56,6 +56,8 @@ pub struct LiveStreamInfo {
     pub normalized_room_id: Option<String>,
     // 新增：直播间的 web_rid（用于关注列表以 web_id 为主键）
     pub web_rid: Option<String>,
+    // 新增：原始API响应数据
+    pub raw: Option<serde_json::Value>,
 }
 
 #[derive(Default, Clone)]
@@ -92,4 +94,6 @@ pub struct MessageFrontendPayload {
     pub content: String,
     pub user_level: i64,
     pub fans_club_level: i32,
+    #[specta(skip)]
+    pub raw: serde_json::Value,
 }

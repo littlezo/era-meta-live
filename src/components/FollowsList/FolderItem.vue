@@ -609,11 +609,11 @@ const getStreamerItemClass = (streamer: FollowedStreamer) => {
   background: transparent;
 }
 
-:root[data-theme="dark"] .folder-item :deep(.secondary-row) {
+:root[data-theme="dark"] .folder-item ::deep(.secondary-row) {
   color: rgba(213, 221, 230, 0.78);
 }
 
-:root[data-theme="dark"] .folder-item :deep(.streamer-item-content:hover .secondary-row) {
+:root[data-theme="dark"] .folder-item ::deep(.streamer-item-content:hover .secondary-row) {
   color: #e8eef5;
 }
 

@@ -1,28 +1,28 @@
-import { Platform as StreamingPlatform } from '../../platforms/common/types';
+import type { SupportedPlatform } from '../../platforms/common/types';
 import type { LineOption } from './plugins';
 
-const lineOptionsByPlatform: Partial<Record<StreamingPlatform, LineOption[]>> = {
-  [StreamingPlatform.DOUYU]: [
+const lineOptionsByPlatform: Partial<Record<SupportedPlatform, LineOption[]>> = {
+  'douyu': [
     { key: 'ws-h5', label: '主线路' },
     { key: 'tct-h5', label: '线路5' },
     { key: 'ali-h5', label: '线路6' },
     { key: 'hs-h5', label: '线路13' },
   ],
-  [StreamingPlatform.HUYA]: [
+  'huya': [
     { key: 'tx', label: '腾讯线路' },
     { key: 'al', label: '阿里线路' },
     { key: 'hs', label: '字节线路' },
   ],
 };
 
-export const getLineOptionsForPlatform = (platform?: StreamingPlatform | null): LineOption[] => {
+export const getLineOptionsForPlatform = (platform?: SupportedPlatform | null): LineOption[] => {
   if (!platform) {
     return [];
   }
   return lineOptionsByPlatform[platform] ?? [];
 };
 
-export const resolveStoredLine = (platform?: StreamingPlatform | null): string | null => {
+export const resolveStoredLine = (platform?: SupportedPlatform | null): string | null => {
   const options = getLineOptionsForPlatform(platform);
   if (!options.length) {
     return null;
@@ -41,7 +41,7 @@ export const resolveStoredLine = (platform?: StreamingPlatform | null): string |
   return options[0]?.key ?? null;
 };
 
-export const persistLinePreference = (platform?: StreamingPlatform | null, lineKey?: string | null) => {
+export const persistLinePreference = (platform?: SupportedPlatform | null, lineKey?: string | null) => {
   if (!platform || !lineKey || typeof window === 'undefined') {
     return;
   }
@@ -52,7 +52,7 @@ export const persistLinePreference = (platform?: StreamingPlatform | null, lineK
   }
 };
 
-export const resolveCurrentLineFor = (platform: StreamingPlatform, currentLine: string | null): string | null => {
+export const resolveCurrentLineFor = (platform: SupportedPlatform, currentLine: string | null): string | null => {
   const options = getLineOptionsForPlatform(platform);
   if (!options.length) {
     return null;

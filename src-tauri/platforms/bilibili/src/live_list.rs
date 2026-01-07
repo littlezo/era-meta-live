@@ -1,37 +1,41 @@
 use md5;
+use std::sync::Arc;
+use serde_json::Value;
 
 // 引入 generate_bilibili_w_webid 以便在缺失时后端自动初始化
-use crate::state::{generate_bilibili_w_webid, BilibiliState};
-use reqwest;
+use crate::state::BilibiliState;
+use shared::interface::LiveList;
+use shared::interface::PlatformType;
+use shared::http_client::HttpClient;
+use shared::logger::Logger;
 
-#[tauri::command]
-pub async fn fetch_bilibili_live_list(
+// 创建静态日志记录器
+static LOGGER: std::sync::OnceLock<Logger> = std::sync::OnceLock::new();
+
+fn logger() -> &'static Logger {
+    LOGGER.get_or_init(|| {
+        Logger::new(Some(PlatformType::Bilibili), "bilibili::live_list")
+    })
+}
+
+pub async fn fetch_live_list(
+    client: &HttpClient,
     area_id: String,
     parent_area_id: String,
     page: u32,
-    state: tauri::State<'_, BilibiliState>,
-) -> Result<String, String> {
+    state: &Arc<BilibiliState>,
+) -> Result<(LiveList, Option<Value>), String> {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     // 每次请求前都刷新一次 w_webid，避免使用过期的 ID
-    let w_webid: String = match generate_bilibili_w_webid(state.clone()).await {
+    let w_webid: String = match state.generate_w_webid().await {
         Ok(id) => {
-            println!("[Bilibili] Refreshed w_webid: {}", id);
+            logger().debug(format!("Refreshed w_webid: {}", id));
             id
         }
         Err(e) => {
-            eprintln!("[Bilibili] Failed to refresh w_webid, will fallback to cached value if available: {}", e);
-            let fallback = { state.w_webid.lock().unwrap().clone() };
-            match fallback {
-                Some(id) => {
-                    println!(
-                        "[Bilibili] Using cached w_webid due to refresh failure: {}",
-                        id
-                    );
-                    id
-                }
-                None => return Err(format!("w_webid 获取失败: {}", e)),
-            }
+            logger().error(format!("Failed to generate w_webid: {}", e));
+            return Err(format!("w_webid 获取失败: {}", e));
         }
     };
 
@@ -63,11 +67,10 @@ pub async fn fetch_bilibili_live_list(
     let hash = md5::compute(sign_string.as_bytes());
     let w_rid = format!("{:x}", hash);
 
-    let mut params: Vec<(String, String)> =
+    let mut params: Vec<(String, String)> = 
         pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     params.push(("w_rid".to_string(), w_rid));
 
-    let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
     let url = "https://api.live.bilibili.com/xlive/web-interface/v1/second/getList";
     let query_str = params
         .iter()
@@ -76,20 +79,15 @@ pub async fn fetch_bilibili_live_list(
         .join("&");
     let full_url = format!("{}?{}", url, query_str);
 
-    println!("[Bilibili] Fetch live list: w_webid={}, area_id={}, parent_area_id={}, page={}, wts={}, w_rid={}", w_webid, area_id, parent_area_id, page, wts, &params.iter().find(|(k,_)| k=="w_rid").map(|(_,v)| v.clone()).unwrap_or_default());
-    println!("[Bilibili] GET {}", full_url);
-    println!(
-        "[Bilibili] Headers: User-Agent={}, Referer={}, Cookie={}",
-        ua, "https://www.bilibili.com/", "buvid3=i;"
-    );
+    logger().debug(format!("Fetch live list: w_webid={}, area_id={}, parent_area_id={}, page={}, wts={}, w_rid={}", w_webid, area_id, parent_area_id, page, wts, &params.iter().find(|(k,_)| k=="w_rid").map(|(_,v)| v.clone()).unwrap_or_default()));
+    logger().debug(format!("GET {}", full_url));
+    logger().debug(format!(
+        "Headers: Referer={}, Cookie={}",
+        "https://www.bilibili.com/", "buvid3=i;"
+    ));
 
-    let client = reqwest::Client::builder()
-        .user_agent(ua)
-        .no_proxy()
-        .build()
-        .map_err(|e| format!("Failed to build client: {}", e))?;
-
-    let resp = client
+    // 使用HttpClient的inner访问内部reqwest::Client
+    let resp = client.inner
         .get(url)
         .header("Referer", "https://www.bilibili.com/")
         .header("Cookie", "buvid3=i;")
@@ -105,5 +103,29 @@ pub async fn fetch_bilibili_live_list(
         .text()
         .await
         .map_err(|e| format!("Read text failed: {}", e))?;
-    Ok(text)
+    
+    let json: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Parse JSON failed: {}", e))?;
+    
+    // 检查API响应是否成功
+    if json["code"].as_i64().unwrap_or(1) != 0 {
+        return Err(format!("API请求失败: {}", json["message"].as_str().unwrap_or("未知错误")));
+    }
+    
+    // 获取数据部分
+    let data = json["data"].clone();
+    let _live_items = data["list"].as_array().unwrap_or(&Vec::new());
+    
+    // 构造LiveList对象
+    let live_list = LiveList {
+        items: Vec::new(), // 这里将在lib.rs中解析，所以返回空列表
+        total: data["total"].as_u64(),
+        page: Some(page),
+        page_size: Some(30),
+        has_more: data["has_more"].as_bool().unwrap_or(false),
+        other: Some(data.clone()),
+        raw: Some(json.clone()),
+    };
+    
+    Ok((live_list, Some(json)))  
 }

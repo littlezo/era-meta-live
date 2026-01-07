@@ -1,13 +1,13 @@
-import { Platform } from '../../platforms/common/types';
-
 // This interface represents the Rust struct: crate::platforms::common::GetStreamUrlPayload
 // It is used as the type for the value of the 'payload' key when invoking 'start_douyin_message_listener'
 // It might also be useful for other platform-specific player helpers if they use a similar payload structure.
-export interface RustGetStreamUrlPayload {
-  args: {
-    room_id_str: string;
-  };
-  platform: Platform; // Platform enum from common/types
+
+export interface GetStreamUrlPayload {
+  room_id: string;
+  platform: string;
+  stream_url: string;
+  quality?: string;
+  line?: string;
 }
 
 // This is the structure used in messages array and for MessageList component

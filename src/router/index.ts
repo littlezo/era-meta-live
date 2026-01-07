@@ -1,13 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import DouyuHomeView from '../pages/DouyuHomeView.vue'
-import DouyinHomeView from '../pages/DouyinHomeView.vue'
-import DouyuPlayerView from '../pages/DouyuPlayerView.vue';
-import DouyinPlayerView from '../pages/DouyinPlayerView.vue';
-import HuyaHomeView from '../pages/HuyaHomeView.vue'
-import HuyaPlayerView from '../pages/HuyaPlayerView.vue'
-import BilibiliHomeView from '../pages/BilibiliHomeView.vue'
-import BilibiliPlayerView from '../pages/BilibiliPlayerView.vue'
+import PlayerView from '../pages/PlayerView.vue'
 import SettingsView from '../pages/SettingsView.vue'
+import HomeView from '../pages/HomeView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -18,47 +12,19 @@ const router = createRouter({
       component: SettingsView
     },
     {
-      path: '/douyu',
-      name: 'DouyuHome',
-      component: DouyuHomeView
+      path: '/home/:platform',
+      name: 'HomePlatform',
+      component: HomeView,
+      props: true
     },
     {
       path: '/',
-      name: 'DouyinHome',
-      component: DouyinHomeView
+      redirect: '/home/douyin'
     },
     {
-      path: '/huya',
-      name: 'HuyaHome',
-      component: HuyaHomeView
-    },
-    {
-      path: '/bilibili',
-      name: 'BilibiliHome',
-      component: BilibiliHomeView
-    },
-    {
-      path: '/player/douyu/:roomId', 
-      name: 'douyuPlayer',
-      component: DouyuPlayerView,
-      props: true
-    },
-    {
-      path: '/player/douyin/:roomId',
-      name: 'douyinPlayer',
-      component: DouyinPlayerView,
-      props: true
-    },
-    {
-      path: '/player/huya/:roomId',
-      name: 'huyaPlayer',
-      component: HuyaPlayerView,
-      props: true
-    },
-    {
-      path: '/player/bilibili/:roomId',
-      name: 'bilibiliPlayer',
-      component: BilibiliPlayerView,
+      path: '/player/:platform/:roomId',
+      name: 'Player',
+      component: PlayerView,
       props: true
     }
   ]

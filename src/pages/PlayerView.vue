@@ -1,6 +1,6 @@
 <template>
   <div class="player-view">
-    <MainPlayer v-if="roomId" :platform="Platform.DOUYU" :room-id="roomId" :is-followed="isFollowed" @follow="handleFollow" @unfollow="handleUnfollow" @close-player="handleClosePlayer" />
+    <MainPlayer v-if="roomId" :platform="platform" :room-id="roomId" :is-followed="isFollowed" @follow="handleFollow" @unfollow="handleUnfollow" @close-player="handleClosePlayer" />
     <div v-else>
       <p>无效的房间ID。</p>
     </div>
@@ -10,28 +10,28 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import MainPlayer from '../components/player/index.vue'; // Assuming MainPlayer is in components/player
-import { useFollowStore } from '../store/followStore'; // Placeholder for follow state
-import type { FollowedStreamer } from '../platforms/common/types'; // Keep as type-only import
-import { Platform } from '../platforms/common/types'; // Regular import for enum
+import MainPlayer from '../components/player/index.vue';
+import { useFollowStore } from '../store/followStore';
+import type { FollowedStreamer, SupportedPlatform } from '../platforms/common/types';
 
 const props = defineProps<{
   roomId: string;
+  platform: SupportedPlatform;
 }>();
 
-const router = useRouter(); // Initialize router
-const followStore = useFollowStore(); // Placeholder
+const router = useRouter();
+const followStore = useFollowStore();
 
 const isFollowed = computed(() => {
-  return followStore.isFollowed(Platform.DOUYU, props.roomId);
+  return followStore.isFollowed(props.platform, props.roomId);
 });
 
 const handleFollow = (streamerData: Omit<FollowedStreamer, 'platform'>) => {
-  followStore.followStreamer({ ...streamerData, platform: Platform.DOUYU, id: props.roomId });
+  followStore.followStreamer({ ...streamerData, platform: props.platform, id: props.roomId });
 };
 
 const handleUnfollow = (platformId: string) => {
-  followStore.unfollowStreamer(Platform.DOUYU, platformId);
+  followStore.unfollowStreamer(props.platform, platformId);
   console.log('PlayerView: Unfollowed', platformId);
 };
 

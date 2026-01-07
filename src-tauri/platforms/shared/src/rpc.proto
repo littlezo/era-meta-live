@@ -1,0 +1,215 @@
+syntax = "proto3";
+
+package live_platform.rpc;
+
+// 平台类型枚举
+enum PlatformType {
+  BILIBILI = 0;
+  DOUYIN = 1;
+  DOUYU = 2;
+  HUYA = 3;
+}
+
+// 直播质量枚举
+enum StreamQuality {
+  P360 = 0;
+  P480 = 1;
+  P720 = 2;
+  P1080 = 3;
+  K2 = 4;
+  K4 = 5;
+  P720_60 = 6;
+  P1080_60 = 7;
+}
+
+// 消息类型枚举
+enum MessageType {
+  DANMAKU = 0;
+  GIFT = 1;
+  SUPER_CHAT = 2;
+  SYSTEM = 3;
+  ENTER_ROOM = 4;
+  LIKE = 5;
+}
+
+// 房间信息
+message RoomInfo {
+  string room_id = 1;
+  string title = 2;
+  string streamer_id = 3;
+  string streamer_name = 4;
+  bool live_status = 5;
+  string cover_url = 6;
+  uint32 viewer_count = 7;
+  string viewer_count_str = 8;
+  string live_status_detail = 9;
+  string avatar_url = 10;
+  string category_name = 11;
+}
+
+// 主播信息
+message StreamerInfo {
+  string id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  bool live_status = 4;
+  string room_id = 5;
+  string room_title = 6;
+  string live_status_detail = 7;
+}
+
+// 消息结构
+message Message {
+  optional string id = 1;
+  MessageType message_type = 2;
+  string user = 3;
+  string content = 4;
+  optional uint32 user_level = 5;
+  optional uint32 fans_level = 6;
+  optional uint32 fans_club_level = 7;
+  optional string badge_name = 8;
+  optional uint32 badge_level = 9;
+  optional string uid = 10;
+  optional string color = 11;
+  uint64 timestamp = 12;
+  string room_id = 13;
+  PlatformType platform = 14;
+  optional string gift_name = 15;
+  optional uint32 gift_count = 16;
+  optional uint32 gift_price = 17;
+  optional uint32 gift_total = 18;
+  optional uint32 super_chat_price = 19;
+  optional uint32 super_chat_duration = 20;
+  optional uint32 combo_count = 21;
+  optional string combo_user = 22;
+  optional string raw = 23;
+}
+
+// 请求和响应定义
+
+message GetRoomInfoRequest {
+  PlatformType platform = 1;
+  string room_id = 2;
+}
+
+message GetRoomInfoResponse {
+  bool success = 1;
+  optional RoomInfo room_info = 2;
+  optional string error = 3;
+}
+
+message GetStreamUrlRequest {
+  PlatformType platform = 1;
+  string room_id = 2;
+  StreamQuality quality = 3;
+}
+
+message GetStreamUrlResponse {
+  bool success = 1;
+  optional string stream_url = 2;
+  optional string error = 3;
+}
+
+message GetLiveListRequest {
+  PlatformType platform = 1;
+  optional string category_id = 2;
+  uint32 page = 3;
+  uint32 page_size = 4;
+}
+
+message GetLiveListResponse {
+  bool success = 1;
+  repeated RoomInfo rooms = 2;
+  bool has_more = 3;
+  optional string error = 4;
+}
+
+message GetCategoriesRequest {
+  PlatformType platform = 1;
+}
+
+message GetCategoriesResponse {
+  bool success = 1;
+  repeated bytes categories = 2; // JSON格式的分类数据
+  optional string error = 3;
+}
+
+message GetStreamerInfoRequest {
+  PlatformType platform = 1;
+  string streamer_id = 2;
+}
+
+message GetStreamerInfoResponse {
+  bool success = 1;
+  optional StreamerInfo streamer_info = 2;
+  optional string error = 3;
+}
+
+message SearchStreamersRequest {
+  PlatformType platform = 1;
+  string keyword = 2;
+  uint32 page = 3;
+  uint32 page_size = 4;
+}
+
+message SearchStreamersResponse {
+  bool success = 1;
+  repeated StreamerInfo streamers = 2;
+  bool has_more = 3;
+  optional string error = 4;
+}
+
+message StartMessageListenerRequest {
+  PlatformType platform = 1;
+  string room_id = 2;
+}
+
+message StartMessageListenerResponse {
+  bool success = 1;
+  optional string listener_id = 2;
+  optional string error = 3;
+}
+
+message StopMessageListenerRequest {
+  string listener_id = 1;
+}
+
+message StopMessageListenerResponse {
+  bool success = 1;
+  optional string error = 2;
+}
+
+message MessageNotification {
+  string listener_id = 1;
+  Message message = 2;
+}
+
+// RPC服务定义
+service LivePlatformRpcService {
+  // 获取房间信息
+  rpc GetRoomInfo(GetRoomInfoRequest) returns (GetRoomInfoResponse);
+  
+  // 获取直播流地址
+  rpc GetStreamUrl(GetStreamUrlRequest) returns (GetStreamUrlResponse);
+  
+  // 获取直播列表
+  rpc GetLiveList(GetLiveListRequest) returns (GetLiveListResponse);
+  
+  // 获取分类列表
+  rpc GetCategories(GetCategoriesRequest) returns (GetCategoriesResponse);
+  
+  // 获取主播信息
+  rpc GetStreamerInfo(GetStreamerInfoRequest) returns (GetStreamerInfoResponse);
+  
+  // 搜索主播
+  rpc SearchStreamers(SearchStreamersRequest) returns (SearchStreamersResponse);
+  
+  // 启动消息监听器
+  rpc StartMessageListener(StartMessageListenerRequest) returns (StartMessageListenerResponse);
+  
+  // 停止消息监听器
+  rpc StopMessageListener(StopMessageListenerRequest) returns (StopMessageListenerResponse);
+  
+  // 消息推送流
+  rpc SubscribeMessages(StartMessageListenerRequest) returns (stream MessageNotification);
+}

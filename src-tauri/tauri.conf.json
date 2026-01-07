@@ -15,6 +15,7 @@
       {
         "titleBarStyle": "Overlay",
         "transparent": false,
+        "decorations": false,
         "title": "",
         "fullscreen": false,
         "resizable": true,

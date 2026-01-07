@@ -1,43 +1,29 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use shared::interface::{StreamQuality, StreamUrl, PlatformError, RoomInfo, PlatformType};
+use shared::logger::Logger;
+use shared::types::StreamVariant;
 
 use base64::{engine::general_purpose, Engine as _};
 use md5::{Digest, Md5};
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{
-    HeaderMap, HeaderValue, ACCEPT, ACCEPT_LANGUAGE, COOKIE, ORIGIN, REFERER, USER_AGENT,
+    HeaderMap, HeaderValue, ACCEPT, ACCEPT_LANGUAGE, COOKIE, REFERER, USER_AGENT,
 };
-use serde::Serialize;
+// use serde::Serialize;
 use serde_json::Value;
-use tauri::State;
 
-use shared::FollowHttpClient;
+
+use crate::models::{HuyaUnifiedStreamEntry, HuyaUnifiedResponse, WebStreamCandidate, HuyaWebStreamData};
 
 const IOS_MOBILE_UA: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
 const DESKTOP_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0";
 
-#[derive(Clone, Debug, Serialize)]
-#[allow(non_snake_case)]
-pub struct HuyaUnifiedStreamEntry {
-    pub quality: String,
-    pub bitRate: i32,
-    pub url: String,
-}
 
-#[derive(Clone, Debug, Serialize)]
-#[allow(non_snake_case)]
-pub struct HuyaUnifiedResponse {
-    pub title: Option<String>,
-    pub nick: Option<String>,
-    pub avatar: Option<String>,
-    pub introduction: Option<String>,
-    pub profileRoom: Option<String>,
-    pub is_live: bool,
-    pub flv_tx_urls: Vec<HuyaUnifiedStreamEntry>,
-    pub selected_url: Option<String>,
-}
 
 fn md5_hex(input: &str) -> String {
     let mut hasher = Md5::new();
@@ -178,104 +164,24 @@ async fn check_live_status(
     Ok(false)
 }
 
-#[derive(Clone, Debug)]
-struct RoomDetail {
-    status: bool,
-    title: Option<String>,
-    nick: Option<String>,
-    avatar180: Option<String>,
-}
 
-#[derive(Clone, Debug)]
-struct WebStreamCandidate {
-    base_flv: String,
-    cdn: String,
-}
-
-#[derive(Clone, Debug)]
-struct HuyaWebStreamData {
-    is_live: bool,
-    candidates: Vec<WebStreamCandidate>,
-}
-
-async fn fetch_room_detail(
-    client: &reqwest::Client,
-    room_id: &str,
-) -> Result<RoomDetail, Box<dyn Error + Send + Sync>> {
-    let url = format!(
-        "https://mp.huya.com/cache.php?m=Live&do=profileRoom&roomid={}&showSecret=1",
-        room_id
-    );
-    let mut headers = HeaderMap::new();
-    headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-    headers.insert(ORIGIN, HeaderValue::from_static("https://m.huya.com"));
-    headers.insert(REFERER, HeaderValue::from_static("https://m.huya.com/"));
-    headers.insert(USER_AGENT, HeaderValue::from_static(IOS_MOBILE_UA));
-
-    let resp = client.get(&url).headers(headers).send().await?;
-    let text = resp.text().await?;
-    let v: Value = serde_json::from_str(&text)?;
-
-    let status_code = v.get("status").and_then(|x| x.as_i64()).unwrap_or(0);
-    if status_code != 200 {
-        return Ok(RoomDetail {
-            status: false,
-            title: None,
-            nick: None,
-            avatar180: None,
-        });
-    }
-
-    let Some(data) = v.get("data") else {
-        return Ok(RoomDetail {
-            status: false,
-            title: None,
-            nick: None,
-            avatar180: None,
-        });
-    };
-
-    let stream_ok = data.get("stream").is_some();
-
-    let title = data
-        .get("liveData")
-        .and_then(|ld| ld.get("introduction"))
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string());
-    let nick = data
-        .get("liveData")
-        .and_then(|ld| ld.get("nick"))
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string());
-    let avatar180 = data
-        .get("liveData")
-        .and_then(|ld| ld.get("avatar180"))
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string());
-
-    Ok(RoomDetail {
-        status: stream_ok,
-        title,
-        nick,
-        avatar180,
-    })
-}
 
 async fn fetch_web_stream_data(
     client: &reqwest::Client,
     room_id: &str,
 ) -> Result<HuyaWebStreamData, Box<dyn Error + Send + Sync>> {
+    let logger = Logger::new(Some(PlatformType::Huya), "huya_stream_url");
     match fetch_web_stream_data_with_headers(client, room_id, false).await {
         Ok(data) if !data.candidates.is_empty() => Ok(data),
         Ok(_) => {
-            println!("[Huya] Desktop UA response contained no stream candidates, retrying with mobile headers.");
+            logger.info("Desktop UA response contained no stream candidates, retrying with mobile headers.");
             fetch_web_stream_data_with_headers(client, room_id, true).await
         }
         Err(err) => {
-            eprintln!(
-                "[Huya] Desktop UA request failed ({:?}), retrying with mobile headers.",
+            logger.error(format!(
+                "Desktop UA request failed ({:?}), retrying with mobile headers.",
                 err
-            );
+            ));
             fetch_web_stream_data_with_headers(client, room_id, true).await
         }
     }
@@ -544,19 +450,19 @@ fn build_flv_tx_urls(candidate: Option<&WebStreamCandidate>) -> Vec<HuyaUnifiedS
     let adjusted_base = adjust_tx_stream_url(&base.base_flv, &base.cdn);
     entries.push(HuyaUnifiedStreamEntry {
         quality: "原画".to_string(),
-        bitRate: 0,
+        bit_rate: 0,
         url: adjusted_base.clone(),
     });
 
     if is_flv_url(&adjusted_base) {
         entries.push(HuyaUnifiedStreamEntry {
             quality: "高清".to_string(),
-            bitRate: 4000,
+            bit_rate: 4000,
             url: format!("{}&ratio={}", adjusted_base, 4000),
         });
         entries.push(HuyaUnifiedStreamEntry {
             quality: "标清".to_string(),
-            bitRate: 2000,
+            bit_rate: 2000,
             url: format!("{}&ratio={}", adjusted_base, 2000),
         });
     }
@@ -564,20 +470,105 @@ fn build_flv_tx_urls(candidate: Option<&WebStreamCandidate>) -> Vec<HuyaUnifiedS
     entries
 }
 
-#[tauri::command]
+// 与LivePlatform trait兼容的获取直播流URL函数
+pub async fn get_stream_url_for_platform(
+    client: Arc<shared::http_client::HttpClient>,
+    room_id: &str,
+    quality: Option<StreamQuality>
+) -> Result<(StreamUrl, Option<serde_json::Value>), PlatformError> {
+    let quality_str = match quality {
+        Some(StreamQuality::UltraHD) => Some("原画"),
+        Some(StreamQuality::HD) => Some("高清"),
+        Some(StreamQuality::SD) => Some("标清"),
+        Some(StreamQuality::LD) => Some("流畅"),
+        Some(StreamQuality::Auto) => None,
+        Some(StreamQuality::Custom(ref q)) => Some(q.as_str()),
+        Some(StreamQuality::Original) => Some("原画"),
+        Some(StreamQuality::K4) => Some("4K"),
+        Some(StreamQuality::K2) => Some("2K"),
+        Some(StreamQuality::P1080_60) => Some("1080P60"),
+        Some(StreamQuality::P720_60) => Some("720P60"),
+        None => None,
+    };
+    
+    let (detail, raw_detail_data) = crate::room_info::fetch_room_info(&client, room_id)
+        .await
+        .map_err(|e| PlatformError::Network(e.to_string()))?;
+
+    let web_stream = fetch_web_stream_data(&client.inner, room_id)
+        .await
+        .map_err(|e| PlatformError::Network(e.to_string()))?;
+
+    let ratio = resolve_ratio(quality_str);
+    let selection = pick_stream_url(&web_stream.candidates, ratio, None);
+    let (selected_url, selected_index) = match selection {
+        Some(value) => value,
+        None => {
+            return Err(PlatformError::Api("No stream URL found".to_string()));
+        }
+    };
+    
+    let tx_entries = build_flv_tx_urls(web_stream.candidates.get(selected_index));
+    let is_live = detail.status || web_stream.is_live;
+    
+    // 构建统一的StreamVariant列表
+    let available_streams = tx_entries
+        .into_iter()
+        .map(|entry| StreamVariant {
+            url: entry.url,
+            format: Some("flv".to_string()),
+            desc: Some(entry.quality),
+            qn: None,
+            protocol: Some("http".to_string()),
+        })
+        .collect();
+    
+    // 构建统一的RoomInfo
+    let room_info = RoomInfo {
+        room_id: room_id.to_string(),
+        title: detail.title.clone().unwrap_or_else(|| "".to_string()),
+        streamer_name: detail.nick.clone().unwrap_or_else(|| "".to_string()),
+        streamer_id: room_id.to_string(), // 使用room_id作为streamer_id，实际应该有专门的主播ID
+        avatar_url: detail.avatar180.clone(),
+        cover_url: None,
+        live_status: is_live,
+        live_status_detail: if is_live { "LIVE" } else { "OFFLINE" }.to_string(),
+        viewer_count: None,
+        viewer_count_str: None,
+        category_name: None,
+        category_id: None,
+        tags: None,
+        other: None,
+        raw: raw_detail_data.clone(),
+    };
+    
+    // 构建统一的StreamUrl
+    let stream_url = StreamUrl {
+        primary_url: selected_url.clone(),
+        upstream_url: Some(selected_url.clone()),
+        available_streams,
+        room_info: Some(room_info),
+        streamer_info: None,
+        other: None,
+        raw: raw_detail_data.clone(),
+    };
+    
+    // 返回原始API数据
+    Ok((stream_url, raw_detail_data))
+}
+
+// 保留原有函数，用于向后兼容
 pub async fn get_huya_unified_cmd(
+    client: Arc<shared::http_client::HttpClient>,
     room_id: String,
     quality: Option<String>,
     line: Option<String>,
-    follow_http: State<'_, FollowHttpClient>,
 ) -> Result<HuyaUnifiedResponse, String> {
-    let client = &follow_http.0.inner;
-
-    let detail = fetch_room_detail(client, &room_id)
+    let (detail, _) = crate::room_info::fetch_room_info(&client, &room_id)
         .await
         .map_err(|e| e.to_string())?;
 
-    let web_stream = fetch_web_stream_data(client, &room_id)
+    let web_stream = fetch_web_stream_data(&client.inner, &room_id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -592,7 +583,7 @@ pub async fn get_huya_unified_cmd(
                 nick: detail.nick.clone(),
                 avatar: detail.avatar180.clone(),
                 introduction: None,
-                profileRoom: None,
+                profile_room: None,
                 is_live: detail.status || web_stream.is_live,
                 flv_tx_urls: Vec::new(),
                 selected_url: None,
@@ -601,8 +592,9 @@ pub async fn get_huya_unified_cmd(
     };
     let tx_entries = build_flv_tx_urls(web_stream.candidates.get(selected_index));
     let is_live = detail.status || web_stream.is_live;
-    println!(
-        "[Huya] requested quality: {:?}, resolved ratio: {:?}, preferred line: {:?}, selected line: {:?}",
+    let logger = Logger::new(Some(PlatformType::Huya), "huya_stream_url");
+    logger.info(format!(
+        "requested quality: {:?}, resolved ratio: {:?}, preferred line: {:?}, selected line: {:?}",
         quality,
         ratio,
         preferred_line,
@@ -610,14 +602,14 @@ pub async fn get_huya_unified_cmd(
             .candidates
             .get(selected_index)
             .map(|c| c.cdn.clone())
-    );
+    ));
 
     Ok(HuyaUnifiedResponse {
         title: detail.title.clone(),
         nick: detail.nick.clone(),
         avatar: detail.avatar180.clone(),
         introduction: None,
-        profileRoom: None,
+        profile_room: None,
         is_live,
         flv_tx_urls: tx_entries,
         selected_url: Some(selected_url),

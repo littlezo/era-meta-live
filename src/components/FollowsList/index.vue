@@ -183,15 +183,16 @@
   </template>
   
   <script setup lang="ts">
+import { platformApi } from '../../platforms/common/platformApiService';
   import { ref, onMounted, computed, watch, onUnmounted, nextTick, reactive } from 'vue';
-  import type { FollowedStreamer, LiveStatus } from '../../platforms/common/types';
-  import { Platform } from '../../platforms/common/types';
+  import type { FollowedStreamer } from '../../platforms/common/types';
+import { LiveStatus } from '../../platforms/common/types';
+  // import { Platform } from '../../platforms/common/types'; // Platform enum is no longer needed
   // import type { DouyuRoomInfo } from '../../platforms/douyu/types'; // No longer needed here
   // import type { DouyinRoomInfo } from './types'; // No longer defined here
 
-  import { refreshDouyuFollowedStreamer } from '../../platforms/douyu/followListHelper';
-  import { refreshDouyinFollowedStreamer } from '../../platforms/douyin/followListHelper';
-  import { invoke } from '@tauri-apps/api/core';
+  // Platform-specific refresh functions are now handled by SDK
+  
   import StreamerItem from './StreamerItem.vue';
   import FollowOverlay from './FollowOverlay.vue';
   import FilterChips from './FilterChips.vue';
@@ -234,7 +235,7 @@
   
   const emit = defineEmits<{
     (e: 'selectAnchor', streamer: FollowedStreamer): void;
-    (e: 'unfollow', payload: { platform: Platform, id: string }): void; // Ensure Platform type is used here if not already
+    (e: 'unfollow', payload: { platform: string, id: string }): void;
     (e: 'reorderList', newList: FollowedStreamer[]): void;
   }>();
   
@@ -304,7 +305,7 @@
     const base = proxyBase.value;
     const isProxied = !!base && target.src.startsWith(base);
     // 如果是代理后的 B 站图片加载失败，不再回退到原始地址（避免 403 报错）
-    if (s.platform === Platform.BILIBILI) {
+    if (s.platform === 'bilibili') {
       // 可选择在此设置占位图，当前保持不变以显示 fallback 文本
       return;
     }
@@ -316,7 +317,7 @@
 
   type RefreshUpdateEntry = { originalKey: string; updated: FollowedStreamer };
 
-  const streamerKey = (platform: Platform | string, id: string) => `${String(platform).toUpperCase()}:${id}`;
+  const streamerKey = (platform: string, id: string) => `${platform.toUpperCase()}:${id}`;
   const toStreamerKey = (streamer: Pick<FollowedStreamer, 'platform' | 'id'>) => streamerKey(streamer.platform, streamer.id);
   const normalizeRawKey = (rawKey?: string | null) => {
     if (!rawKey) return '';
@@ -625,7 +626,7 @@
   // Overlay: floating full follow list with platform filters
   const showOverlay = ref(false);
   const overlayDeleteMode = ref(false);
-  type FilterType = 'ALL' | Platform;
+  type FilterType = 'ALL' | string;
   const activeFilter = ref<FilterType>('ALL');
   const openOverlay = () => { 
     const headerRect = document.querySelector('.app-header')?.getBoundingClientRect() as DOMRect | undefined
@@ -643,9 +644,9 @@
     overlayDeleteMode.value = !overlayDeleteMode.value;
   };
   const setFilter = (f: FilterType) => { activeFilter.value = f; };
-  const platformsOrder: Platform[] = [Platform.DOUYU, Platform.DOUYIN, Platform.HUYA, Platform.BILIBILI];
+  const platformsOrder: string[] = ['douyu', 'douyin', 'huya', 'bilibili'];
   const visiblePlatforms = computed(() => {
-    const present = new Set<Platform>();
+    const present = new Set<string>();
     for (const s of streamers.value) {
       if (s.platform !== undefined) present.add(s.platform);
     }
@@ -1099,7 +1100,7 @@
     progressTotal.value = totalFromStore > 0 ? totalFromStore : props.followedAnchors.length;
     try {
       // 仅在包含 B 站主播时启动静态代理（用于头像等图片代理）
-      const hasBiliOrHuya = props.followedAnchors.some(s => s.platform === Platform.BILIBILI || s.platform === Platform.HUYA);
+      const hasBiliOrHuya = props.followedAnchors.some(s => s.platform === 'bilibili' || s.platform === 'huya');
       if (hasBiliOrHuya) {
         await ensureProxyStarted();
       }
@@ -1110,72 +1111,42 @@
       await runWithConcurrency(items, async (streamer) => {
         let updatedStreamerData: Partial<FollowedStreamer> = {};
         try {
-          if (streamer.platform === Platform.DOUYU) {
-            updatedStreamerData = await refreshDouyuFollowedStreamer(streamer);
-          } else if (streamer.platform === Platform.DOUYIN) {
-            updatedStreamerData = await refreshDouyinFollowedStreamer(streamer);
-          } else if (streamer.platform === Platform.HUYA) {
-            try {
-              const res: any = await invoke('get_huya_unified_cmd', { roomId: streamer.id, quality: '原画' });
-              const live: boolean = !!(res && res.is_live);
-              const liveStatus: LiveStatus = live ? 'LIVE' : 'OFFLINE';
-              updatedStreamerData = {
-                liveStatus,
-                isLive: live,
-                nickname: (res && res.nick) ? res.nick : streamer.nickname,
-                roomTitle: (res && res.title) ? res.title : streamer.roomTitle,
-                avatarUrl: (res && res.avatar) ? res.avatar : streamer.avatarUrl,
-              };
-            } catch (err: any) {
-              const msg = typeof err === 'string' ? err : (err?.message || '');
-              if (msg.includes('主播未开播或获取虎牙房间详情失败')) {
-                updatedStreamerData = {
-                  liveStatus: 'OFFLINE',
-                  isLive: false,
-                  nickname: streamer.nickname,
-                  roomTitle: streamer.roomTitle,
-                  avatarUrl: streamer.avatarUrl,
-                };
-              } else {
-                throw err;
-              }
-            }
-          } else if (streamer.platform === Platform.BILIBILI) {
-            const payload = { args: { room_id_str: streamer.id } };
-            const savedCookie = (typeof localStorage !== 'undefined') ? (localStorage.getItem('bilibili_cookie') || null) : null;
-            const res: any = await invoke('fetch_bilibili_streamer_info', { payload, cookie: savedCookie });
-            const liveStatus: LiveStatus = (res && res.status === 1) ? 'LIVE' : 'OFFLINE';
+            // 使用统一的 fetchRoomInfo API 为所有平台获取直播状态
+            const platformLower = streamer.platform.toLowerCase();
+            const res = await platformApi.fetchRoomInfo(streamer.id, platformLower as any);
+            
+            // 简化直播状态判断逻辑，只依赖 live_status 布尔值
+            const isLive = res.live_status;
+            const liveStatus: LiveStatus = isLive ? LiveStatus.LIVE : LiveStatus.OFFLINE;
+            
+            console.log(`[FollowsList] Room info result for ${platformLower}:${streamer.id}:`, res);
+            
             updatedStreamerData = {
               liveStatus,
-              isLive: liveStatus === 'LIVE',
-              nickname: (res && res.anchor_name) ? res.anchor_name : streamer.nickname,
-              roomTitle: (res && res.title) ? res.title : streamer.roomTitle,
-              avatarUrl: (res && res.avatar) ? res.avatar : streamer.avatarUrl,
+              isLive,
+              nickname: res.streamer_name || streamer.nickname,
+              roomTitle: res.title || streamer.roomTitle,
+              avatarUrl: res.avatar_url || streamer.avatarUrl,
             };
-          } else {
-            console.warn(`Unsupported platform for refresh: ${streamer.platform}`);
+
             updates.push({
               originalKey: `${streamer.platform}:${streamer.id}`,
-              updated: streamer,
+              updated: {
+                ...streamer,
+                ...updatedStreamerData,
+              } as FollowedStreamer,
             });
-            progressCurrent.value++;
-            return;
-          }
-
-          updates.push({
-            originalKey: `${streamer.platform}:${streamer.id}`,
-            updated: {
-              ...streamer,
-              ...updatedStreamerData,
-            } as FollowedStreamer,
-          });
-        } catch (e) {
-          console.error(`[FollowsList] Error during refresh for ${streamer.platform}/${streamer.id}, returning original:`, e);
-          updates.push({
-            originalKey: `${streamer.platform}:${streamer.id}`,
-            updated: streamer,
-          });
-        } finally {
+          } catch (err: any) {
+            console.error(`[FollowsList] Failed to fetch room info for ${streamer.platform}:${streamer.id}:`, err);
+            // 出错时保持原有状态，避免状态错误
+            updates.push({
+              originalKey: `${streamer.platform}:${streamer.id}`,
+              updated: {
+                ...streamer,
+                // 出错时不改变状态，保持原有状态
+              } as FollowedStreamer,
+            });
+          } finally {
           // 更新进度
           progressCurrent.value++;
         }
@@ -1220,7 +1191,7 @@
     }
     
     // 在初次渲染前，若包含 B 站主播则先启动静态代理，避免头像首次以原始地址加载导致 403
-    const hasBili = props.followedAnchors.some(s => s.platform === Platform.BILIBILI);
+    const hasBili = props.followedAnchors.some(s => s.platform === 'bilibili');
     if (hasBili) {
       await ensureProxyStarted();
     }

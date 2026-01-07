@@ -1,10 +1,14 @@
 use futures_util::{SinkExt, StreamExt};
-use log::info;
 use tars_stream::prelude::*;
-use tauri::Emitter;
-use tokio::sync::mpsc as tokio_mpsc;
+use tokio::sync::oneshot;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
+
+// 使用统一的MessageCallback类型和Logger
+use shared::interface::{MessageCallback, Message, MessageType, PlatformType, MessageListener, ListenerStatus, PlatformError};
+use shared::logger::Logger;
+use shared::EventBroadcaster;
+use shared::PlatformEvent;
 
 const WS_URL: &str = "wss://cdnws.api.huya.com";
 // 恢复 HEARTBEAT 常量（被误删），供心跳发送使用
@@ -66,10 +70,11 @@ async fn fetch_huya_ids(room_id: &str) -> Result<(i64, i64), String> {
         return Err("未找到频道ID，房间可能未开播".to_string());
     }
 
-    println!(
-        "[Huya Message] fetch_huya_ids: room_id={} yyid={} topSid={}",
+    let logger = Logger::new(Some(PlatformType::Huya), "huya_message");
+    logger.info(format!(
+        "fetch_huya_ids: room_id={} yyid={} topSid={}",
         room_id, ayyuid, top_sid
-    );
+    ));
     Ok((ayyuid, top_sid))
 }
 
@@ -79,7 +84,6 @@ pub struct HuyaJoinParams {
     pub top_sid: i64,
 }
 
-#[tauri::command]
 pub async fn fetch_huya_join_params(room_id: String) -> Result<HuyaJoinParams, String> {
     match fetch_huya_ids(&room_id).await {
         Ok((ayyuid, top_sid)) => Ok(HuyaJoinParams {
@@ -90,127 +94,229 @@ pub async fn fetch_huya_join_params(room_id: String) -> Result<HuyaJoinParams, S
     }
 }
 
-#[tauri::command]
-pub async fn start_huya_message_listener(
-    payload: shared::GetStreamUrlPayload,
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, shared::HuyaMessageState>,
-) -> Result<(), String> {
-    let room_id_or_url = payload.args.room_id_str.clone();
-    println!(
-        "[Huya Message] start listener room_id_or_url={}",
-        room_id_or_url
-    );
-    info!(
-        "[Huya Message] start listener room_id_or_url={}",
-        room_id_or_url
-    );
+/// Huya消息监听器实现
+pub struct HuyaMessageListener {
+    room_id: String,
+    stop_tx: Option<oneshot::Sender<()>>,
+    status: ListenerStatus,
+    message_count: u32,
+}
 
-    // 停止已有监听
-    let previous_tx = {
-        let mut lock = state.inner().0.lock().unwrap();
-        lock.take()
+#[async_trait::async_trait]
+impl MessageListener for HuyaMessageListener {
+    // 停止消息监听
+    async fn stop(&mut self) -> Result<(), PlatformError> {
+        let logger = Logger::new(Some(PlatformType::Huya), "huya_message");
+        logger.info(format!("stop called for room_id: {}", self.room_id));
+        
+        // 更新状态
+        self.status.status = "DISCONNECTING".to_string();
+        self.status.last_update = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        
+        // 发送停止信号
+        if let Some(tx) = self.stop_tx.take() {
+            logger.info("Sending shutdown to Huya listener task.");
+            if let Err(e) = tx.send(()) {
+                logger.error(format!("Failed to send stop signal: {:?}", e));
+            }
+        }
+        
+        // 更新状态
+        self.status.status = "DISCONNECTED".to_string();
+        self.status.last_update = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        
+        Ok(())
+    }
+    
+    // 获取监听器状态
+    fn status(&self) -> ListenerStatus {
+        self.status.clone()
+    }
+    
+    // 获取消息计数
+    fn message_count(&self) -> u32 {
+        self.message_count
+    }
+}
+
+// 与LivePlatform trait兼容的启动消息监听器函数
+pub async fn start_message_listener(
+    room_id: &str,
+    callback: MessageCallback
+) -> Result<Box<dyn MessageListener>, String> {
+    let logger = Logger::new(Some(PlatformType::Huya), "huya_message");
+    logger.info(format!("start listener room_id={}", room_id));
+
+    // 创建关闭通道
+    let (tx_shutdown, mut rx_shutdown) = oneshot::channel::<()>();
+    let room_id_clone = room_id.to_string();
+
+    // 创建初始监听器状态
+    let initial_status = ListenerStatus {
+        platform: PlatformType::Huya,
+        room_id: room_id.to_string(),
+        status: "CONNECTING".to_string(),
+        message_count: 0,
+        last_update: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
     };
-    if let Some(tx) = previous_tx {
-        let _ = tx.send(()).await;
-    }
-
-    // 创建新的关闭通道并保存到 State
-    let (tx_shutdown, mut rx_shutdown) = tokio_mpsc::channel::<()>(1);
-    {
-        let mut lock = state.inner().0.lock().unwrap();
-        *lock = Some(tx_shutdown);
-    }
-
-    let app_handle_clone = app_handle.clone();
-    let room_id_clone = room_id_or_url.clone();
+    
+    // 创建监听器实例
+    let listener = HuyaMessageListener {
+        room_id: room_id.to_string(),
+        stop_tx: Some(tx_shutdown),
+        status: initial_status.clone(),
+        message_count: 0,
+    };
 
     tokio::spawn(async move {
-        println!(
-            "[Huya Message] spawned worker for room_id={}",
-            room_id_clone
-        );
-        info!(
-            "[Huya Message] spawned worker for room_id={}",
-            room_id_clone
-        );
-        // 1) 获取 ws 与注册数据（与根目录 huya.rs 同步）
+        let logger = Logger::new(Some(PlatformType::Huya), "huya_message");
+        logger.info(format!("spawned worker for room_id={}", room_id_clone));
+        
+        // 1) 获取 ws 与注册数据
         let (ws_url, reg_data) = match get_ws_info_tars(&room_id_clone).await {
             Ok(v) => v,
             Err(e) => {
-                let _ = app_handle_clone.emit(
-                    "message",
-                    shared::MessageFrontendPayload {
-                        room_id: room_id_clone.clone(),
-                        user: "系统".to_string(),
-                        content: format!("Huya房间信息获取失败: {}", e),
-                        user_level: 0,
-                        fans_club_level: 0,
-                    },
-                );
+                // 发送错误消息给回调
+                let error_msg = Message {
+                    id: None,
+                    message_type: MessageType::System,
+                    user: "系统".to_string(),
+                    content: format!("Huya房间信息获取失败: {}", e),
+                    user_level: None,
+                    fans_level: None,
+                    fans_club_level: None,
+                    badge_name: None,
+                    badge_level: None,
+                    uid: None,
+                    color: None,
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                    room_id: room_id_clone.clone(),
+                    platform: PlatformType::Huya,
+                    gift_name: None,
+                    gift_count: None,
+                    gift_price: None,
+                    gift_total: None,
+                    super_chat_price: None,
+                    super_chat_duration: None,
+                    combo_count: None,
+                    combo_user: None,
+                    raw: None,
+                    other: None,
+                };
+                callback(error_msg);
                 return;
             }
         };
 
-        println!(
-            "[Huya Message] ws_url={} reg_len={}",
-            ws_url,
-            reg_data.len()
-        );
-        info!(
-            "[Huya Message] ws_url={} reg_len={}",
-            ws_url,
-            reg_data.len()
-        );
+        logger.info(format!("ws_url={} reg_len={}", ws_url, reg_data.len()));
 
         // 2) 连接 WebSocket
-        println!("[Huya Message] connecting to {}", ws_url);
-        info!("[Huya Message] connecting to {}", ws_url);
+        logger.info(format!("connecting to {}", ws_url));
         let (ws_stream, _) = match connect_async(&ws_url).await {
             Ok(v) => v,
             Err(e) => {
-                let _ = app_handle_clone.emit(
-                    "message",
-                    shared::MessageFrontendPayload {
-                        room_id: room_id_clone.clone(),
-                        user: "系统".to_string(),
-                        content: format!("Huya弹幕连接失败: {}", e),
-                        user_level: 0,
-                        fans_club_level: 0,
-                    },
-                );
+                // 发送错误消息给回调
+                let error_msg = Message {
+                    id: None,
+                    message_type: MessageType::System,
+                    user: "系统".to_string(),
+                    content: format!("Huya弹幕连接失败: {}", e),
+                    user_level: None,
+                    fans_level: None,
+                    fans_club_level: None,
+                    badge_name: None,
+                    badge_level: None,
+                    uid: None,
+                    color: None,
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                    room_id: room_id_clone.clone(),
+                    platform: PlatformType::Huya,
+                    gift_name: None,
+                    gift_count: None,
+                    gift_price: None,
+                    gift_total: None,
+                    super_chat_price: None,
+                    super_chat_duration: None,
+                    combo_count: None,
+                    combo_user: None,
+                    raw: None,
+                    other: None,
+                };
+                callback(error_msg);
                 return;
             }
         };
 
         let (mut ws_write, mut ws_read) = ws_stream.split();
         if let Err(e) = ws_write.send(WsMessage::Binary(reg_data)).await {
-            let _ = app_handle_clone.emit(
-                "message",
-                shared::MessageFrontendPayload {
-                    room_id: room_id_clone.clone(),
-                    user: "系统".to_string(),
-                    content: format!("Huya注册数据发送失败: {}", e),
-                    user_level: 0,
-                    fans_club_level: 0,
-                },
-            );
+            // 发送错误消息给回调
+            let error_msg = Message {
+                id: None,
+                message_type: MessageType::System,
+                user: "系统".to_string(),
+                content: format!("Huya注册数据发送失败: {}", e),
+                user_level: None,
+                fans_level: None,
+                fans_club_level: None,
+                badge_name: None,
+                badge_level: None,
+                uid: None,
+                color: None,
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+                room_id: room_id_clone.clone(),
+                platform: PlatformType::Huya,
+                gift_name: None,
+                gift_count: None,
+                gift_price: None,
+                gift_total: None,
+                super_chat_price: None,
+                super_chat_duration: None,
+                combo_count: None,
+                combo_user: None,
+                raw: None,
+                other: None,
+            };
+            callback(error_msg);
             return;
         }
 
         // 3) 心跳与接收
-        let hb_task = async {
+        let logger_hb = logger.clone();
+        let hb_task = async move {
             let mut hb_seq = 0usize;
-            while let Ok(_) = ws_write.send(WsMessage::Binary(HEARTBEAT.into())).await {
+            loop {
+                if let Err(e) = ws_write.send(WsMessage::Binary(HEARTBEAT.into())).await {
+                    logger_hb.error(format!("Huya心跳发送失败: {:?}", e));
+                    break;
+                }
                 hb_seq += 1;
-                println!("[Huya Message] heartbeat sent #{}", hb_seq);
-                info!("[Huya Message] heartbeat sent #{}", hb_seq);
+                logger_hb.debug(format!("heartbeat sent #{} ", hb_seq));
                 sleep(Duration::from_secs(20)).await;
             }
             Err::<(), anyhow::Error>(anyhow::anyhow!("Huya心跳发送失败"))
         };
 
-        let recv_task = async {
+        let logger_recv = logger.clone();
+        let room_id_recv = room_id_clone.clone();
+        let recv_task = async move {
             while let Some(m) = ws_read.next().await {
                 let m = match m {
                     Ok(x) => x,
@@ -219,95 +325,92 @@ pub async fn start_huya_message_listener(
                 match m {
                     WsMessage::Binary(bin) => {
                         let (top_cmd, nested_cmd) = peek_cmds(&bin);
-                        println!(
-                            "[Huya Message] WS msg: len={} top_cmd={:?} nested_cmd={:?}",
+                        logger_recv.debug(format!(
+                            "WS msg: len={} top_cmd={:?} nested_cmd={:?}",
                             bin.len(),
                             top_cmd,
                             nested_cmd
-                        );
-                        info!(
-                            "[Huya Message] WS msg: len={} top_cmd={:?} nested_cmd={:?}",
-                            bin.len(),
-                            top_cmd,
-                            nested_cmd
-                        );
-                        match decode_msg_tars(&bin)? {
-                            Some((nick, text)) => {
-                                println!("[Huya Message] decoded chat: {} -> {}", nick, text);
-                                info!("[Huya Message] decoded chat: {} -> {}", nick, text);
-                                let _ = app_handle_clone.emit(
-                                    "message",
-                                    shared::MessageFrontendPayload {
-                                        room_id: room_id_clone.clone(),
-                                        user: nick,
-                                        content: text,
-                                        user_level: 0,
-                                        fans_club_level: 0,
-                                    },
-                                );
+                        ));
+                        match decode_msg_tars(&bin) {
+                            Ok(Some((nick, text))) => {
+                                logger_recv.debug(format!("decoded chat: {} -> {}", nick, text));
+                                
+                                // 构建统一的Message结构体并发送给回调
+                                let message = Message {
+                                    id: None,
+                                    message_type: MessageType::Danmaku,
+                                    user: nick,
+                                    content: text,
+                                    user_level: None,
+                                    fans_level: None,
+                                    fans_club_level: None,
+                                    badge_name: None,
+                                    badge_level: None,
+                                    uid: None,
+                                    color: None,
+                                    timestamp: std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as u64,
+                                    room_id: room_id_recv.clone(),
+                                    platform: PlatformType::Huya,
+                                    gift_name: None,
+                                    gift_count: None,
+                                    gift_price: None,
+                                    gift_total: None,
+                                    super_chat_price: None,
+                                    super_chat_duration: None,
+                                    combo_count: None,
+                                    combo_user: None,
+                                    raw: None,
+                                    other: None,
+                                };
+                                callback(message.clone());
+                                // 使用事件广播器发布消息
+                                EventBroadcaster::global().publish(PlatformEvent::Message(message));
                             }
-                            None => {
+                            Ok(None) => {
                                 if top_cmd == Some(7) {
-                                    println!(
-                                        "[Huya Message] non-chat or empty msg, nested={:?}",
+                                    logger_recv.debug(format!(
+                                        "non-chat or empty msg, nested={:?}",
                                         nested_cmd
-                                    );
-                                    info!(
-                                        "[Huya Message] non-chat or empty msg, nested={:?}",
-                                        nested_cmd
-                                    );
+                                    ));
                                 }
+                            }
+                            Err(e) => {
+                                logger_recv.error(format!("decode error: {:?}", e));
                             }
                         }
                     }
                     other => {
-                        println!("[Huya Message] non-binary ws message: {:?}", other);
-                        info!("[Huya Message] non-binary ws message: {:?}", other);
+                        logger_recv.debug(format!("non-binary ws message: {:?}", other));
                     }
                 }
             }
             anyhow::Ok(())
         };
 
+        let logger_select = logger;
+        let room_id_select = room_id_clone;
         tokio::select! {
-            _ = rx_shutdown.recv() => {
+            _ = &mut rx_shutdown => {
                 // 主动关闭
+                logger_select.info(format!("stop signal received, terminating listener for room_id={}", room_id_select));
             }
             it = hb_task => {
-                if let Err(e) = it { eprintln!("[Huya Message] {}", e); }
+                if let Err(e) = it { 
+                    logger_select.error(format!("{}", e)); 
+                }
             }
             it = recv_task => {
-                if let Err(e) = it { eprintln!("[Huya Message] 接收失败: {}", e); }
+                if let Err(e) = it { 
+                    logger_select.error(format!("接收失败: {}", e)); 
+                }
             }
         }
     });
 
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn stop_huya_message_listener(
-    room_id: String,
-    state: tauri::State<'_, shared::HuyaMessageState>,
-) -> Result<(), String> {
-    println!(
-        "[Huya Message] stop_huya_message_listener called for room_id={}",
-        room_id
-    );
-
-    // 取出当前监听的停止信号发送器
-    let tx = {
-        let mut lock = state.inner().0.lock().unwrap();
-        lock.take()
-    };
-
-    if let Some(tx) = tx {
-        let _ = tx.send(()).await;
-    } else {
-        println!("[Huya Message] 没有找到活跃的监听器需要停止");
-    }
-
-    Ok(())
+    Ok(Box::new(listener))
 }
 
 // 采用 tars_stream 的实现（参考 all_in_one.rs），保留 Tauri 命令，对旧 jce 逻辑停用
@@ -397,6 +500,8 @@ fn gen_ua() -> String {
 }
 
 async fn get_ws_info_tars(room_id_or_url: &str) -> Result<(String, Vec<u8>), String> {
+    let logger = Logger::new(Some(PlatformType::Huya), "huya_message");
+    
     let url = if room_id_or_url.starts_with("http") {
         reqwest::Url::parse(room_id_or_url).map_err(|e| e.to_string())?
     } else {
@@ -407,8 +512,7 @@ async fn get_ws_info_tars(room_id_or_url: &str) -> Result<(String, Vec<u8>), Str
         .path_segments()
         .and_then(|s| s.last())
         .ok_or_else(|| "房间ID解析失败".to_string())?;
-    println!("[Huya Message] get_ws_info_tars rid={}", rid);
-    info!("[Huya Message] get_ws_info_tars rid={}", rid);
+    logger.info(format!("get_ws_info_tars rid={}", rid));
 
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -424,8 +528,7 @@ async fn get_ws_info_tars(room_id_or_url: &str) -> Result<(String, Vec<u8>), Str
         .text()
         .await
         .map_err(|e| e.to_string())?;
-    println!("[Huya Message] fetched room page len={}", resp_text.len());
-    info!("[Huya Message] fetched room page len={}", resp_text.len());
+    logger.debug(format!("fetched room page len={}", resp_text.len()));
 
     // 先尝试 TT_PROFILE_INFO 提取 lp
     let mut ayyuid = {
@@ -445,8 +548,8 @@ async fn get_ws_info_tars(room_id_or_url: &str) -> Result<(String, Vec<u8>), Str
     };
     if ayyuid.is_empty() {
         // 直接匹配 lp
-        let re_lp =
-            regex::Regex::new(r#"\\\"lp\\\"\s*:\s*\\\"?(\d+)\\\"?"#).map_err(|e| e.to_string())?;
+        let re_lp = regex::Regex::new(r#"\\\"lp\\\"\s*:\s*\\\"?(\d+)\\\"?"#)
+            .map_err(|e| e.to_string())?;
         if let Some(cap) = re_lp.captures(&resp_text) {
             ayyuid = cap.get(1).unwrap().as_str().to_string();
         }
@@ -487,14 +590,12 @@ async fn get_ws_info_tars(room_id_or_url: &str) -> Result<(String, Vec<u8>), Str
     if ayyuid.is_empty() {
         ayyuid = rid.to_string();
     }
-    println!("[Huya Message] final ayyuid={}", ayyuid);
-    info!("[Huya Message] final ayyuid={}", ayyuid);
+    logger.info(format!("final ayyuid={}", ayyuid));
 
     let mut topics = Vec::new();
     topics.push(format!("live:{}", ayyuid));
     topics.push(format!("chat:{}", ayyuid));
-    println!("[Huya Message] topics={:?}", topics);
-    info!("[Huya Message] topics={:?}", topics);
+    logger.debug(format!("topics={:?}", topics));
 
     let mut oos = TarsEncoder::new();
     oos.write_list(0, &topics).map_err(|e| e.to_string())?;
@@ -507,27 +608,25 @@ async fn get_ws_info_tars(room_id_or_url: &str) -> Result<(String, Vec<u8>), Str
         .write_bytes(1, &oos.to_bytes())
         .map_err(|e| e.to_string())?;
     let b = wscmd.to_bytes();
-    println!("[Huya Message] reg payload built, len={}", b.len());
-    info!("[Huya Message] reg payload built, len={}", b.len());
+    logger.debug(format!("reg payload built, len={}", b.len()));
 
     Ok((WS_URL.to_owned(), b.as_ref().to_vec()))
 }
 
 fn decode_msg_tars(data: &[u8]) -> anyhow::Result<Option<(String, String)>> {
+    let logger = Logger::new(Some(PlatformType::Huya), "huya_message");
     let mut ret: Option<(String, String)> = None;
     let mut ios = TarsDecoder::from(data);
     let top = ios.read_int32(0, false, -1)?;
     if top != 7 {
-        println!("[Huya Message] ignore msg: top_cmd={}", top);
-        info!("[Huya Message] ignore msg: top_cmd={}", top);
+        logger.debug(format!("ignore msg: top_cmd={}", top));
         return Ok(ret);
     }
     let b1 = ios.read_bytes(1, false, Default::default())?;
     let mut inner = TarsDecoder::from(b1.as_ref());
     let nested = inner.read_int32(1, false, -1).unwrap_or(-1);
     let b2 = inner.read_bytes(2, false, Default::default())?;
-    println!("[Huya Message] nested={} payload_len={}", nested, b2.len());
-    info!("[Huya Message] nested={} payload_len={}", nested, b2.len());
+    logger.debug(format!("nested={} payload_len={}", nested, b2.len()));
     let mut payload = TarsDecoder::from(b2.as_ref());
 
     if nested == 1400 {
@@ -561,22 +660,16 @@ fn decode_msg_tars(data: &[u8]) -> anyhow::Result<Option<(String, String)>> {
                 "匿名".to_string()
             };
             let _color_hex = format!("{:06x}", if fmt.color <= 0 { 16777215 } else { fmt.color });
-            println!(
-                "[Huya Message] decoded nested=1400 nick={} text={}",
+            logger.debug(format!(
+                "decoded nested=1400 nick={} text={}",
                 nick, text
-            );
-            info!(
-                "[Huya Message] decoded nested=1400 nick={} text={}",
-                nick, text
-            );
+            ));
             ret = Some((nick, text));
         } else {
-            println!("[Huya Message] empty text in nested=1400");
-            info!("[Huya Message] empty text in nested=1400");
+            logger.debug("empty text in nested=1400");
         }
     } else {
-        println!("[Huya Message] non-chat nested={}, skip", nested);
-        info!("[Huya Message] non-chat nested={}, skip", nested);
+        logger.debug(format!("non-chat nested={}, skip", nested));
     }
     Ok(ret)
 }

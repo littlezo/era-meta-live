@@ -97,6 +97,7 @@
 </template>
 
 <script setup lang="ts">
+import { platformApi } from '../../platforms/common/platformApiService';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue';
 import Player from 'xgplayer';
 import FlvPlugin from 'xgplayer-flv';
@@ -106,8 +107,10 @@ import 'xgplayer/dist/index.min.css';
 
 import './player.css';
 
-import { Platform as StreamingPlatform } from '../../platforms/common/types';
+
+// import { Platform as StreamingPlatform } from '../../platforms/common/types'; // Platform enum is no longer needed
 import type { Message, MessageOverlayInstance } from './types';
+import type { SupportedPlatform } from '../../platforms/common/types';
 import {
   applyMessageFontFamilyForOS,
   ICONS,
@@ -130,19 +133,19 @@ import { arrangeControlClusters } from './controlLayout';
 import { applyMessageOverlayPreferences, createMessageOverlay, ensureMessageOverlayHost, syncMessageEnabledState } from './messageOverlay';
 import { registerPlayerWatchers, type PlayerProps } from './watchers';
 import { startCurrentMessageListener as startMessageListener, stopCurrentMessageListener as stopMessageListener } from './messageManager';
-import { getLineLabel, getLineOptionsForPlatform, persistLinePreference, resolveCurrentLineFor, resolveStoredLine } from './lineOptions';
+import { getLineLabel, getLineOptionsForPlatform, persistLinePreference, resolveStoredLine } from './lineOptions';
 
-// Platform-specific player helpers
-import { getDouyuStreamConfig, stopDouyuProxy } from '../../platforms/douyu/playerHelper';
-import { fetchAndPrepareDouyinStreamConfig } from '../../platforms/douyin/playerHelper';
-import { getHuyaStreamConfig } from '../../platforms/huya/playerHelper';
-import { getBilibiliStreamConfig } from '../../platforms/bilibili/playerHelper';
+// Platform-specific player helpers are now handled by SDK
+// import { getDouyuStreamConfig, stopDouyuProxy } from '../../platforms/douyu/playerHelper';
+// import { fetchAndPrepareDouyinStreamConfig } from '../../platforms/douyin/playerHelper';
+// import { getHuyaStreamConfig } from '../../platforms/huya/playerHelper';
+// import { getBilibiliStreamConfig } from '../../platforms/bilibili/playerHelper';
 
 import StreamerInfo from '../StreamerInfo/index.vue';
 import MessageList from '../MessageList/index.vue';
 import LoadingDots from '../Common/LoadingDots.vue';
 
-import { invoke } from '@tauri-apps/api/core';
+
 import { useImageProxy } from '../FollowsList/useProxy';
 
 // Ensure image proxy helpers are available in this component
@@ -209,7 +212,7 @@ const osName = ref<string>('');
 // 画质切换相关
 const qualityOptions = ['原画', '高清', '标清'] as const;
 
-const resolveStoredQuality = (platform?: StreamingPlatform | null): string => {
+const resolveStoredQuality = (platform?: string | null): string => {
   if (!platform) {
     return '原画';
   }
@@ -287,7 +290,7 @@ function destroyPlayerInstance() {
 
 async function mountXgPlayer(
   streamUrl: string,
-  platformCode: StreamingPlatform,
+  platformCode: string,
   roomId: string,
   streamType?: string | null,
 ) {
@@ -596,11 +599,11 @@ async function mountXgPlayer(
 
 async function initializePlayerAndStream(
   pRoomId: string, 
-  pPlatform: StreamingPlatform,
+  pPlatform: string,
   _pStreamUrlProp?: string | null, 
   isRefresh: boolean = false,
   oldRoomIdForCleanup?: string | null,
-  oldPlatformForCleanup?: StreamingPlatform | null
+  oldPlatformForCleanup?: string | null
 ) {
   isLoadingStream.value = true;
   streamError.value = null;
@@ -627,8 +630,8 @@ async function initializePlayerAndStream(
 
   if (oldRoomIdForCleanup && oldPlatformForCleanup !== undefined && oldPlatformForCleanup !== null) {
     await stopCurrentMessageListener(oldPlatformForCleanup);
-    if (oldPlatformForCleanup === StreamingPlatform.DOUYU) {
-      await stopDouyuProxy();
+    if (oldPlatformForCleanup === 'douyu') {
+      // await stopDouyuProxy();
     }
   } else {
     await stopCurrentMessageListener();
@@ -636,72 +639,109 @@ async function initializePlayerAndStream(
 
   destroyPlayerInstance();
 
-  const effectiveLine = resolveCurrentLineFor(pPlatform, currentLine.value);
-
   try {
-    let streamConfig: { streamUrl: string; streamType: string | undefined };
-
-    if (pPlatform === StreamingPlatform.DOUYU) {
-      if (playerIsLive.value === false) {
-        streamError.value = streamError.value || '主播未开播。';
-        isOfflineError.value = true;
-        isLoadingStream.value = false;
-        return;
-      }
-      streamConfig = await getDouyuStreamConfig(pRoomId, currentQuality.value, effectiveLine);
-    } else if (pPlatform === StreamingPlatform.DOUYIN) {
-      const douyinConfig = await fetchAndPrepareDouyinStreamConfig(pRoomId, currentQuality.value);
-      playerTitle.value = douyinConfig.title;
-      playerAnchorName.value = douyinConfig.anchorName;
-      playerAvatar.value = douyinConfig.avatar;
-      playerIsLive.value = douyinConfig.isLive;
-
-      if (douyinConfig.initialError || !douyinConfig.isLive || !douyinConfig.streamUrl) {
-        streamError.value = douyinConfig.initialError || '主播未开播或无法获取直播流。';
-        isOfflineError.value = true;
-        playerIsLive.value = false;
-        isLoadingStream.value = false;
-        console.warn(`[Player] Douyin config error or not live: ${streamError.value}`);
-        return;
-      }
-
-      streamConfig = { streamUrl: douyinConfig.streamUrl, streamType: douyinConfig.streamType };
-    } else if (pPlatform === StreamingPlatform.HUYA) {
-      streamConfig = await getHuyaStreamConfig(pRoomId, currentQuality.value, effectiveLine);
-    } else if (pPlatform === StreamingPlatform.BILIBILI) {
-      streamConfig = await getBilibiliStreamConfig(pRoomId, currentQuality.value, props.cookie || undefined);
+    // 使用统一的 API 获取直播流配置
+    const platformLower = pPlatform.toLowerCase();
+    console.log(`[Player] Getting stream URL for ${platformLower}:${pRoomId} with quality ${currentQuality.value}`);
+    
+    const streamConfig = await platformApi.getStreamUrl(pRoomId, currentQuality.value, platformLower as SupportedPlatform);
+    
+    console.log(`[Player] Stream config result for ${platformLower}:${pRoomId}:`, streamConfig);
+    
+    // 设置玩家信息
+    if (streamConfig.room_info) {
+      playerTitle.value = streamConfig.room_info.title;
+      playerAnchorName.value = streamConfig.room_info.streamer_name;
+      playerAvatar.value = streamConfig.room_info.avatar_url || props.avatar;
+      
+      // 简化直播状态判断逻辑，只依赖 live_status 布尔值
+      const isLive = streamConfig.room_info.live_status;
+      playerIsLive.value = isLive;
+      
+      console.log(`[Player] Streamer info updated for ${platformLower}:${pRoomId}:`, {
+        title: streamConfig.room_info.title,
+        streamer_name: streamConfig.room_info.streamer_name,
+        live_status: streamConfig.room_info.live_status,
+        live_status_detail: streamConfig.room_info.live_status_detail,
+        isLive: playerIsLive.value
+      });
     } else {
-      throw new Error(`不支持的平台: ${pPlatform}`);
+      playerTitle.value = props.title;
+      playerAnchorName.value = props.anchorName;
+      playerAvatar.value = props.avatar;
+      
+      // 不默认认为是直播中，而是尝试获取实际直播状态
+      try {
+        const roomInfo = await platformApi.fetchRoomInfo(pRoomId, platformLower as SupportedPlatform);
+        playerIsLive.value = roomInfo.live_status;
+        console.log(`[Player] Fetched room info for live status check:`, { isLive: playerIsLive.value });
+      } catch (error) {
+        playerIsLive.value = false;
+        console.warn(`[Player] Failed to fetch room info for live status check:`, error);
+      }
+      
+      console.log(`[Player] Using default streamer info:`, { title: props.title, anchorName: props.anchorName, isLive: playerIsLive.value });
     }
-
+    
+    // 检查是否主播未开播
+    if (!playerIsLive.value) {
+      streamError.value = '主播未开播。';
+      isOfflineError.value = true;
+      destroyPlayerInstance();
+      isLoadingStream.value = false;
+      console.log(`[Player] Streamer is offline for ${platformLower}:${pRoomId}`);
+      return;
+    }
+    
+    // 获取主要直播流URL和类型
+    const primaryUrl = streamConfig.primary_url;
+    if (!primaryUrl) {
+      streamError.value = '无法获取直播流地址。';
+      isOfflineError.value = true;
+      destroyPlayerInstance();
+      isLoadingStream.value = false;
+      console.log(`[Player] No primary URL found for ${platformLower}:${pRoomId}`);
+      return;
+    }
+    
+    // 确定流类型（flv或hls）
+    let streamType = 'flv';
+    if (primaryUrl.includes('.m3u8') || primaryUrl.includes('hls')) {
+      streamType = 'hls';
+    }
+    
+    console.log(`[Player] Using stream URL: ${primaryUrl} (${streamType}) for ${platformLower}:${pRoomId}`);
+    
     isLoadingStream.value = false;
-    await mountXgPlayer(streamConfig.streamUrl, pPlatform, pRoomId, streamConfig.streamType);
+    await mountXgPlayer(primaryUrl, platformLower, pRoomId, streamType);
   } catch (error: any) {
     console.error(`[Player] Error initializing stream for ${pPlatform} room ${pRoomId}:`, error);
     destroyPlayerInstance();
 
     const errorMessage = error?.message || '加载直播流失败，请稍后再试。';
+    console.log(`[Player] Stream initialization error:`, { errorMessage, error });
 
-    if (errorMessage.includes('主播未开播')) {
+    if (errorMessage.includes('主播未开播') || errorMessage.includes('直播已结束')) {
       streamError.value = errorMessage;
       isOfflineError.value = true;
 
       try {
-        if (pPlatform === StreamingPlatform.HUYA) {
-          const result: any = await invoke('get_huya_unified_cmd', { roomId: pRoomId, quality: currentQuality.value, line: effectiveLine ?? null });
-          await ensureProxyStarted();
-          playerTitle.value = result?.title ?? props.title;
-          playerAnchorName.value = result?.nick ?? props.anchorName;
-          playerAvatar.value = proxify((result?.avatar ?? props.avatar ?? '') as string);
-        } else if (pPlatform === StreamingPlatform.BILIBILI) {
-          const payload = { args: { room_id_str: pRoomId } };
-          const savedCookie = (typeof localStorage !== 'undefined') ? (localStorage.getItem('bilibili_cookie') || null) : null;
-          const res: any = await invoke('fetch_bilibili_streamer_info', { payload, cookie: savedCookie });
-          await ensureProxyStarted();
-          playerTitle.value = res?.title ?? props.title;
-          playerAnchorName.value = res?.anchor_name ?? props.anchorName;
-          playerAvatar.value = proxify((res?.avatar ?? props.avatar ?? '') as string);
-        }
+        // 使用统一的 fetchRoomInfo API 获取主播信息
+        const platformLower = pPlatform.toLowerCase();
+        console.log(`[Player] Fetching room info for offline status: ${platformLower}:${pRoomId}`);
+        
+        const res = await platformApi.fetchRoomInfo(pRoomId, platformLower as SupportedPlatform);
+        await ensureProxyStarted();
+        
+        playerTitle.value = res.title ?? props.title;
+        playerAnchorName.value = res.streamer_name ?? props.anchorName;
+        playerAvatar.value = proxify((res.avatar_url ?? props.avatar ?? '') as string);
+        
+        // 结合 live_status 和 live_status_detail 判断直播状态
+        const isLive = !!res.live_status && res.live_status_detail === 'LIVE';
+        playerIsLive.value = isLive;
+        
+        console.log(`[Player] Offline room info result:`, { title: res.title, streamer_name: res.streamer_name, isLive });
       } catch (infoError) {
         console.warn('[Player] Failed to fetch basic streamer info for offline page:', infoError);
       }
@@ -722,12 +762,12 @@ const messageManagerContext = {
   props,
 };
 
-const startCurrentMessageListener = async (platform: StreamingPlatform, roomId: string, messageOverlay: MessageOverlayInstance | null) => {
-  await startMessageListener(messageManagerContext, platform, roomId, messageOverlay);
+const startCurrentMessageListener = async (platform: string, roomId: string, messageOverlay: MessageOverlayInstance | null) => {
+  await startMessageListener(messageManagerContext, platform as any, roomId, messageOverlay);
 };
 
-const stopCurrentMessageListener = async (platform?: StreamingPlatform) => {
-  await stopMessageListener(messageManagerContext, platform);
+const stopCurrentMessageListener = async (platform?: string) => {
+  await stopMessageListener(messageManagerContext, platform as any);
 };
 
 const retryInitialization = async () => {
@@ -890,7 +930,7 @@ registerPlayerWatchers({
   initializeQualityPreference,
   initializePlayerAndStream,
   stopCurrentMessageListener,
-  stopDouyuProxy,
+  stopDouyuProxy: async () => {}, // 添加空的 stopDouyuProxy 函数实现
   destroyPlayerInstance,
   isLoadingStream,
   messageMessages,
@@ -924,11 +964,11 @@ onMounted(async () => {
 });
 
 onUnmounted(async () => {
-  const platformToStop: StreamingPlatform = props.platform;
+  const platformToStop: string = props.platform;
   await stopCurrentMessageListener(platformToStop);
 
-  if (props.platform === StreamingPlatform.DOUYU) {
-    await stopDouyuProxy();
+  if (props.platform === 'douyu') {
+    // await stopDouyuProxy(); // stopDouyuProxy 函数已移至 SDK
   }
 
   destroyPlayerInstance();

@@ -2,6 +2,10 @@
 name = "platforms"
 version = "0.1.0"
 edition = "2021"
+authors = ["@长久同学 <x@era-x.cn>", "@Era X Team <gorup@era-x.cn>"]
+
+[lib]
+crate-type = ["staticlib", "cdylib", "lib"]
 
 [dependencies]
 bilibili = { path = "./bilibili" }
@@ -28,15 +32,16 @@ once_cell = "1.21"
 lazy_static = "1.5.0"
 prost = "0.12"
 prost-types = "0.12"
+tonic = { version = "0.10", features = ["tls", "transport"] }
 tars-stream = "0.1.1"
 tungstenite = { version = "0.21", features = ["native-tls"] }
 log = "0.4"
 native-tls = "0.2"
-openssl-sys = { version = "0.9", features = ["vendored"] }
 flate2 = "1.1"
 urlencoding = "2.1.3"
 rand = "0.8"
-tauri = { version = "2.9.5", features = ["macos-private-api", "devtools"] }
+async-trait = "0.1.80"
+
 cookie = "0.18"
 brotlic = "0.8"
 chrono = "0.4"

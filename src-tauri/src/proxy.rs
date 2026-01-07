@@ -2,7 +2,7 @@ use actix_web::{dev::ServerHandle, web, App, HttpRequest, HttpResponse, HttpServ
 use futures_util::TryStreamExt;
 use reqwest::Client;
 // awc removed for now due to API differences; using reqwest streaming
-use crate::StreamUrlStore;
+use platforms::shared::types::StreamUrlStore;
 use serde::Deserialize;
 use std::io::ErrorKind;
 use std::net::TcpStream;

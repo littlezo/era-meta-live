@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { FollowedStreamer, Platform } from '../platforms/common/types';
+import type { FollowedStreamer } from '../platforms/common/types';
 
 // 文件夹类型
 export interface FollowFolder {
@@ -35,7 +35,7 @@ export const useFollowStore = defineStore('follow', {
     _snapshot: null,
   }),
   getters: {
-    isFollowed: (state: FollowState) => (platform: Platform, id: string): boolean => {
+    isFollowed: (state: FollowState) => (platform: string, id: string): boolean => {
       return state.followedStreamers.some((s: FollowedStreamer) => s.platform === platform && s.id === id);
     },
     getFollowedStreamers: (state: FollowState): FollowedStreamer[] => {
@@ -152,7 +152,7 @@ export const useFollowStore = defineStore('follow', {
         this._saveListOrder();
       }
     },
-    unfollowStreamer(platform: Platform, id: string) {
+    unfollowStreamer(platform: string, id: string) {
       const index = this.followedStreamers.findIndex((s: FollowedStreamer) => s.platform === platform && s.id === id);
       if (index !== -1) {
         this.followedStreamers.splice(index, 1);
@@ -189,7 +189,7 @@ export const useFollowStore = defineStore('follow', {
       this._saveFollows();
     },
     // You might also need an action to update details of a followed streamer (e.g., live status)
-    updateStreamerDetails(updatedStreamer: Partial<FollowedStreamer> & { platform: Platform; id: string }) {
+    updateStreamerDetails(updatedStreamer: Partial<FollowedStreamer> & { platform: string; id: string }) {
       const index = this.followedStreamers.findIndex((s: FollowedStreamer) => s.platform === updatedStreamer.platform && s.id === updatedStreamer.id);
       if (index !== -1) {
         this.followedStreamers[index] = { ...this.followedStreamers[index], ...updatedStreamer };
@@ -197,7 +197,7 @@ export const useFollowStore = defineStore('follow', {
       }
     },
     // Replace a followed streamer's ID (used for Douyin webRid -> room_id migration)
-    replaceStreamerId(platform: Platform, oldId: string, newId: string) {
+    replaceStreamerId(platform: string, oldId: string, newId: string) {
       const index = this.followedStreamers.findIndex((s: FollowedStreamer) => s.platform === platform && s.id === oldId);
       if (index !== -1) {
         this.followedStreamers[index] = { ...this.followedStreamers[index], id: newId } as FollowedStreamer;
@@ -278,7 +278,7 @@ export const useFollowStore = defineStore('follow', {
         const streamerItems: FollowStreamerItem[] = folder.streamerIds
           .map(key => {
             const [platform, id] = key.split(':');
-            const streamer = this.followedStreamers.find(s => s.platform === platform as Platform && s.id === id);
+            const streamer = this.followedStreamers.find(s => s.platform === platform && s.id === id);
             return streamer ? ({ type: 'streamer' as const, data: streamer } as FollowStreamerItem) : null;
           })
           .filter((item): item is FollowStreamerItem => item !== null);

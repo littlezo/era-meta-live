@@ -27,7 +27,7 @@
             @fullscreen-change="handleFullscreenChange"
           >
             <transition name="fade" mode="out-in">
-              <keep-alive :include="['HomeView', 'DouyinHomeView', 'HuyaHomeView', 'BilibiliHomeView']">
+              <keep-alive :include="['HomeView']">
                 <component :is="Component" :key="route.path" />
               </keep-alive>
             </transition>
@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform as detectPlatform } from '@tauri-apps/plugin-os'
@@ -61,7 +61,8 @@ import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
 import { useFollowStore } from '../store/followStore'
 import type { FollowedStreamer } from '../platforms/common/types'
-import { Platform } from '../platforms/common/types'
+import { platformApi } from '../platforms/common/platformApiService'
+// import { Platform } from '../platforms/common/types' // Platform enum is no longer needed
 
 const router = useRouter()
 const followStore = useFollowStore()
@@ -96,7 +97,31 @@ onMounted(async () => {
   } catch (error) {
     console.error('[MainLayout] Failed to detect platform', error)
   }
+  
+  // 发送初始关注列表给后端
+  if (followedStreamersFromStore.value.length > 0) {
+    try {
+      await platformApi.sendFollowList(followedStreamersFromStore.value)
+      console.log('[MainLayout] Follow list sent to backend successfully')
+    } catch (error) {
+      console.error('[MainLayout] Failed to send follow list', error)
+    }
+  }
 })
+
+// 监听关注列表变化，实时发送给后端
+watch(
+  followedStreamersFromStore,
+  async (newList) => {
+    try {
+      await platformApi.sendFollowList(newList)
+      console.log('[MainLayout] Follow list updated and sent to backend')
+    } catch (error) {
+      console.error('[MainLayout] Failed to send updated follow list', error)
+    }
+  },
+  { deep: true }
+)
 
 onBeforeUnmount(async () => {
   if (unlistenResize) {
@@ -107,12 +132,7 @@ onBeforeUnmount(async () => {
 
 const isPlayerRoute = computed(() => {
   const name = router.currentRoute.value.name
-  return (
-    name === 'douyuPlayer' ||
-    name === 'douyinPlayer' ||
-    name === 'huyaPlayer' ||
-    name === 'bilibiliPlayer'
-  )
+  return name === 'Player'
 })
 
 const shouldHidePlayerChrome = computed(() => {
@@ -120,24 +140,11 @@ const shouldHidePlayerChrome = computed(() => {
 })
 
 const handleStreamerSelect = (streamer: FollowedStreamer) => {
-  let routeName = '';
-  if (streamer.platform === Platform.DOUYU) {
-    routeName = 'douyuPlayer';
-  } else if (streamer.platform === Platform.DOUYIN) {
-    routeName = 'douyinPlayer';
-  } else if (streamer.platform === Platform.HUYA) {
-    routeName = 'huyaPlayer';
-  } else if (streamer.platform === Platform.BILIBILI) {
-    routeName = 'bilibiliPlayer';
-  } else {
-    console.error('Unsupported platform for player:', streamer.platform);
-    return;
-  }
-
   router.push({
-    name: routeName,
+    name: 'Player',
     params: {
       roomId: streamer.id,
+      platform: streamer.platform.toLowerCase()
     },
   });
 }
@@ -146,9 +153,9 @@ const handleFollowStore = (streamer: FollowedStreamer) => {
   followStore.followStreamer(streamer)
 }
 
-const handleUnfollowStore = (payload: {platform: Platform, id: string} | string) => {
+const handleUnfollowStore = (payload: {platform: string, id: string} | string) => {
   if (typeof payload === 'string') {
-    followStore.unfollowStreamer(Platform.DOUYU, payload)
+    followStore.unfollowStreamer('douyu', payload)
   } else {
     followStore.unfollowStreamer(payload.platform, payload.id)
   }

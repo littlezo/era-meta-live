@@ -3,12 +3,12 @@ import { watch, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { sanitizeMessageArea, sanitizeMessageOpacity } from './constants';
 import type { MessageUserSettings } from './constants';
 import type { MessageSettingsControl, MessageToggleControl, LineControl, QualityControl, RefreshControl, LineOption } from './plugins';
-import { Platform as StreamingPlatform } from '../../platforms/common/types';
+import type { SupportedPlatform } from '../../platforms/common/types';
 import type { Message, MessageOverlayInstance } from './types';
 
 export interface PlayerProps {
   roomId: string | null;
-  platform: StreamingPlatform;
+  platform: SupportedPlatform;
   isFollowed?: boolean;
   streamUrl?: string | null;
   title?: string | null;
@@ -29,9 +29,9 @@ export interface PlayerWatcherContext {
   lineOptions: ComputedRef<LineOption[]>;
   currentLine: Ref<string | null>;
   getLineLabel: (key?: string | null) => string;
-  persistLinePreference: (platform?: StreamingPlatform | null, lineKey?: string | null) => void;
+  persistLinePreference: (platform?: SupportedPlatform | null, lineKey?: string | null) => void;
   props: PlayerProps;
-  resolveStoredLine: (platform?: StreamingPlatform | null) => string | null;
+  resolveStoredLine: (platform?: SupportedPlatform | null) => string | null;
   isMessageEnabled: Ref<boolean>;
   messageTogglePlugin: ShallowRef<MessageToggleControl | null>;
   messageInstance: ShallowRef<MessageOverlayInstance | null>;
@@ -54,13 +54,13 @@ export interface PlayerWatcherContext {
   initializeQualityPreference: () => void;
   initializePlayerAndStream: (
     roomId: string,
-    platform: StreamingPlatform,
+    platform: SupportedPlatform,
     streamUrl?: string | null,
     isRefresh?: boolean,
     oldRoomIdForCleanup?: string | null,
-    oldPlatformForCleanup?: StreamingPlatform | null,
+    oldPlatformForCleanup?: SupportedPlatform | null,
   ) => Promise<void>;
-  stopCurrentMessageListener: (platform?: StreamingPlatform) => Promise<void>;
+  stopCurrentMessageListener: (platform?: SupportedPlatform) => Promise<void>;
   stopDouyuProxy: () => Promise<void>;
   destroyPlayerInstance: () => void;
   isLoadingStream: Ref<boolean>;
@@ -266,7 +266,7 @@ export const registerPlayerWatchers = (ctx: PlayerWatcherContext) => {
       [newRoomId, newPlatform, newStreamUrl, newAvatar, newTitle, newAnchorName, newIsLive],
       [oldRoomId, oldPlatform, oldStreamUrl],
     ) => {
-      if (newPlatform === StreamingPlatform.DOUYU) {
+      if (newPlatform === 'douyu') {
         playerTitle.value = newTitle;
         playerAnchorName.value = newAnchorName;
         playerAvatar.value = newAvatar;
@@ -282,7 +282,7 @@ export const registerPlayerWatchers = (ctx: PlayerWatcherContext) => {
 
         const isInitialCall = oldRoomId === undefined && oldPlatform === undefined;
         const hasSwitchedStream = newRoomId !== oldRoomId || newPlatform !== oldPlatform;
-        const douyinStreamUrlChanged = newPlatform === StreamingPlatform.DOUYIN && newStreamUrl !== oldStreamUrl;
+        const douyinStreamUrlChanged = newPlatform === 'douyin' && newStreamUrl !== oldStreamUrl;
 
         const needsReInit = hasSwitchedStream || isInitialCall || douyinStreamUrlChanged;
 
@@ -293,7 +293,7 @@ export const registerPlayerWatchers = (ctx: PlayerWatcherContext) => {
       } else if (!newRoomId) {
         if (oldRoomId && oldPlatform !== null && oldPlatform !== undefined) {
           await stopCurrentMessageListener(oldPlatform);
-          if (oldPlatform === StreamingPlatform.DOUYU) {
+          if (oldPlatform === 'douyu') {
             await stopDouyuProxy();
           }
         } else {

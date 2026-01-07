@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 // use serde_json::Value; // For parts of the response that are complex or not fully typed - REMOVED IF UNUSED
 use std::collections::HashMap; // For flv_pull_url
 
-// --- Public struct for the Tauri command result ---
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(dead_code)]
 pub struct LiveStreamInfo {

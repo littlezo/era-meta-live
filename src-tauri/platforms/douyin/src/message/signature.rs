@@ -6,6 +6,18 @@ use std::collections::HashMap;
 use std::sync::Once;
 use url::Url;
 
+use shared::interface::PlatformType;
+use shared::logger::Logger;
+
+// 创建静态日志记录器
+static LOGGER: std::sync::OnceLock<Logger> = std::sync::OnceLock::new();
+
+fn logger() -> &'static Logger {
+    LOGGER.get_or_init(|| {
+        Logger::new(Some(PlatformType::Douyin), "douyin::message::signature")
+    })
+}
+
 // Load sign.js content at compile time
 const SIGN_JS_CONTENT: &str = include_str!("./sign.js");
 
@@ -52,14 +64,14 @@ pub async fn generate_signature(
         tpl_params_vec.push(format!("{}={}", key_str, value));
     }
     let to_sign_str = tpl_params_vec.join(",");
-    println!("[Rust] String to MD5 for signature: {}", to_sign_str);
+    logger().debug(format!("String to MD5 for signature: {}", to_sign_str));
 
     // Use md_5 crate for MD5 computation
     let mut hasher = Md5::new();
     hasher.update(to_sign_str.as_bytes());
     let digest_bytes = hasher.finalize();
     let md5_param = format!("{:x}", digest_bytes);
-    println!("[Rust] MD5 param for signature: {}", md5_param);
+    logger().debug(format!("MD5 param for signature: {}", md5_param));
 
     ensure_js_runtime_platform_initialized();
     let mut runtime = JsRuntime::new(RuntimeOptions::default());
@@ -75,7 +87,7 @@ pub async fn generate_signature(
     runtime
         .execute_script("[bootstrap]", FastString::from_static(bootstrap_script))
         .map_err(|e| {
-            eprintln!("Error during deno_core bootstrap script: {}", e);
+            logger().error(format!("Error during deno_core bootstrap script: {}", e));
             e
         })?;
 
@@ -83,7 +95,7 @@ pub async fn generate_signature(
     runtime
         .execute_script("./sign.js", FastString::from_static(SIGN_JS_CONTENT))
         .map_err(|e| {
-            eprintln!("Error during deno_core eval of sign.js: {}", e);
+            logger().error(format!("Error during deno_core eval of sign.js: {}", e));
             e
         })?;
 
@@ -93,7 +105,7 @@ pub async fn generate_signature(
     let result = runtime
         .execute_script("[call_get_sign]", fast_call_script)
         .map_err(|e| {
-            eprintln!("Error during deno_core call to get_sign: {}", e);
+            logger().error(format!("Error during deno_core call to get_sign: {}", e));
             e
         })?;
 
@@ -102,9 +114,10 @@ pub async fn generate_signature(
 
     if local_value.is_string() {
         let signature = local_value.to_rust_string_lossy(scope);
-        println!("[Rust] Final signature: {}", signature);
+        logger().debug(format!("Final signature: {}", signature));
         Ok(signature)
     } else {
+        logger().error("get_sign did not return a string value from deno_core");
         Err(
             Box::from("get_sign did not return a string value from deno_core")
                 as Box<dyn std::error::Error + Send + Sync>,
@@ -123,15 +136,12 @@ pub fn generate_ms_token(length: usize) -> String {
         .collect()
 }
 
-#[tauri::command]
+/// 生成抖音msToken
+/// 
+/// # 返回
+/// - `String`: 生成的msToken
 pub fn generate_douyin_ms_token() -> String {
     // For now, let's assume msToken length is always 107, as used elsewhere.
     // If variable length is needed, this command could take a length parameter.
     generate_ms_token(107)
 }
-
-// Placeholder for the more complex signature generation if needed later.
-// pub async fn generate_signature(wss_url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-//     // ... (implementation from demo if required)
-//     unimplemented!();
-// }

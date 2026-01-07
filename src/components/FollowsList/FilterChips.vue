@@ -16,19 +16,19 @@
 </template>
 
 <script setup lang="ts">
-import { Platform } from '../../platforms/common/types';
+// Platform enum is no longer needed
 
 defineProps<{
-  visiblePlatforms: Platform[],
-  activeFilter: 'ALL' | Platform,
+  visiblePlatforms: string[],
+  activeFilter: 'ALL' | string,
 }>();
 
-const platformLabel = (p: Platform): string => {
+const platformLabel = (p: string): string => {
   switch (p) {
-    case Platform.DOUYU: return '斗鱼';
-    case Platform.DOUYIN: return '抖音';
-    case Platform.HUYA: return '虎牙';
-    case Platform.BILIBILI: return 'B站';
+    case 'douyu': return '斗鱼';
+    case 'douyin': return '抖音';
+    case 'huya': return '虎牙';
+    case 'bilibili': return 'B站';
     default: return '未知';
   }
 };

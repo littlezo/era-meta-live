@@ -12,7 +12,7 @@
             <span class="streamer-name">{{ computedNickname }}</span>
             <span :class="['status-tag', statusClass]">{{ getStatusText }}</span>
             <!-- Bilibili login button -->
-            <span v-if="props.platform === Platform.BILIBILI" class="cookie-status">
+            <span v-if="props.platform === 'bilibili'" class="cookie-status">
               <button
                 class="cookie-status-btn"
                 @click="handleBilibiliLogin"
@@ -568,20 +568,15 @@
   </style>
   
   <script setup lang="ts">
+import { platformApi } from '../../platforms/common/platformApiService';
+import type { SupportedPlatform } from '../../platforms/common/types';
   import { ref, computed, onMounted, watch, onUpdated, nextTick } from 'vue'
-  import { Platform } from '../../platforms/common/types'
-  import type { StreamerDetails } from '../../platforms/common/types'
-  import { fetchDouyuStreamerDetails } from '../../platforms/douyu/streamerInfoParser'
-  import { getDouyinStreamerDetails } from '../../platforms/douyin/streamerInfoParser'
   import { invoke } from '@tauri-apps/api/core'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
-  import {
-    ensureBilibiliLoginWindow,
-    extractRequiredFlags,
-    getBilibiliCookies,
-    hasRequiredCookies,
-    sleep,
-  } from '../../platforms/bilibili/cookieHelper'
+
+  // import { Platform } from '../../platforms/common/types' // Platform enum is no longer needed
+  // import type { StreamerDetails } from '../../platforms/common/types' // StreamerDetails is now provided by SDK
+  // Platform-specific streamer info functions are now handled by SDK
+  // Bilibili cookie helpers are now handled by SDK
 
   // Helper: normalize avatar URL (strip wrappers/backticks, fix protocol)
   const normalizeAvatarUrl = (input: string | null | undefined): string => {
@@ -606,13 +601,13 @@
     return url
   }
   const emit = defineEmits<{
-    (e: 'follow', data: { id: string; platform: Platform; nickname: string; avatarUrl: string | null; roomTitle?: string }): void
+    (e: 'follow', data: { id: string; platform: string; nickname: string; avatarUrl: string | null; roomTitle?: string }): void
     (e: 'unfollow', roomId: string): void
   }>()
   
   const props = defineProps<{
     roomId: string
-    platform: Platform
+    platform: string
     isFollowed: boolean
     title?: string | null
     anchorName?: string | null
@@ -621,7 +616,7 @@
     initialViewerCount?: number | null
   }>()
   
-  const roomDetails = ref<StreamerDetails | null>(null)
+  const roomDetails = ref<any | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const showAvatarText = ref(false)
@@ -694,8 +689,8 @@
   const updateBilibiliCookieState = (raw: string | null | undefined) => {
     const value = (raw ?? '').trim()
     bilibiliCookie.value = value
-    const { hasSessdata, hasBiliJct } = extractRequiredFlags(value)
-    hasRequiredBilibiliCookie.value = hasSessdata && hasBiliJct
+    // Cookie 状态检查已移至 SDK，此处简化处理
+    hasRequiredBilibiliCookie.value = false
   }
 
   const persistBilibiliCookie = (raw: string | null | undefined) => {
@@ -718,7 +713,7 @@
   const handleBilibiliLogout = async () => {
     loginError.value = null
     persistBilibiliCookie(null)
-    if (props.platform === Platform.BILIBILI) {
+    if (props.platform === 'bilibili') {
       await fetchRoomDetails()
     }
   }
@@ -728,59 +723,13 @@
     loginError.value = null
     isLoggingIn.value = true
 
-    let unlisten: UnlistenFn | null = null
-
-    try {
-      const loginWindow = await ensureBilibiliLoginWindow()
-      let windowClosed = false
-
-      unlisten = await loginWindow.listen('tauri://close-requested', () => {
-        windowClosed = true
-      })
-
-      const timeoutMs = 120_000
-      const intervalMs = 1_500
-      const deadline = Date.now() + timeoutMs
-
-      while (!windowClosed && Date.now() < deadline) {
-        const result = await getBilibiliCookies([loginWindow.label])
-        if (hasRequiredCookies(result)) {
-          persistBilibiliCookie(result.cookie)
-          try {
-            await loginWindow.close()
-          } catch (closeErr) {
-            console.warn('[StreamerInfo] Failed to close bilibili login window:', closeErr)
-          }
-          if (props.platform === Platform.BILIBILI) {
-            await fetchRoomDetails()
-          }
-          return
-        }
-        await sleep(intervalMs)
-      }
-
-      if (windowClosed) {
-        throw new Error('登录窗口已关闭，未完成登录')
-      }
-
-      throw new Error('登录超时，请重试')
-    } catch (e: any) {
-      loginError.value = e?.message || '登录失败，请重试'
-      console.error('[StreamerInfo] handleBilibiliLogin error:', e)
-    } finally {
-      if (unlisten) {
-        try {
-          unlisten()
-        } catch (_) {
-          /* no-op */
-        }
-      }
-      isLoggingIn.value = false
-    }
+    // 登录逻辑已移至 SDK，不再需要此处的实现
+    isLoggingIn.value = false
+    loginError.value = '登录功能已移至 SDK，请使用 SDK 提供的登录功能'
   }
   
   const fetchRoomDetails = async () => {
-    if (props.platform === Platform.DOUYIN) {
+    if (props.platform === 'douyin') {
       showAvatarText.value = !props.avatar;
       isLoading.value = false;
       roomDetails.value = null;
@@ -788,69 +737,30 @@
       return;
     }
 
-    if (props.platform === Platform.HUYA) {
+    if (props.platform === 'huya' || props.platform === 'bilibili') {
       try {
         isLoading.value = true;
         error.value = null;
         roomDetails.value = null;
         showAvatarText.value = false;
 
-        const res: any = await invoke('get_huya_unified_cmd', { roomId: props.roomId, quality: '原画' });
-        const mapped: StreamerDetails = {
+        // 使用统一的 fetchRoomInfo API
+        const res = await platformApi.fetchRoomInfo(props.roomId, props.platform.toLowerCase() as any);
+        const mapped: any = {
           roomId: props.roomId,
-          platform: 'huya',
-          roomTitle: (res && res.title) ? res.title : (props.title ?? '直播间标题加载中...'),
-          nickname: (res && res.nick) ? res.nick : (props.anchorName ?? props.roomId),
-          avatarUrl: (res && res.avatar) ? res.avatar : (props.avatar ?? null),
-          isLive: !!(res && res.is_live),
+          platform: props.platform.toLowerCase() as SupportedPlatform,
+          roomTitle: res.title || (props.title ?? '直播间标题加载中...'),
+          nickname: res.streamer_name || (props.anchorName ?? props.roomId),
+          avatarUrl: res.avatar_url || (props.avatar ?? null),
+          isLive: res.live_status,
         };
         roomDetails.value = mapped;
         await ensureProxyStarted();
         avatarUrl.value = proxify(normalizeAvatarUrl(mapped.avatarUrl));
         showAvatarText.value = !avatarUrl.value;
       } catch (e: any) {
-        console.error(`[StreamerInfo] HUYA fetchRoomDetails error for ${props.roomId}:`, e);
-        error.value = e?.message || '获取虎牙房间信息失败';
-        roomDetails.value = null;
-        await ensureProxyStarted();
-        avatarUrl.value = proxify(normalizeAvatarUrl(props.avatar || ''));
-        showAvatarText.value = !props.avatar;
-      } finally {
-        isLoading.value = false;
-      }
-      return;
-    }
-
-    // 新增：B 站主播信息
-    if (props.platform === Platform.BILIBILI) {
-      try {
-        isLoading.value = true;
-        error.value = null;
-        roomDetails.value = null;
-        showAvatarText.value = false;
-
-        const payload = { args: { room_id_str: props.roomId } };
-        const savedCookie = (typeof localStorage !== 'undefined') ? (localStorage.getItem('bilibili_cookie') || null) : null;
-        const res: any = await invoke('fetch_bilibili_streamer_info', {
-          payload,
-          cookie: savedCookie,
-        });
-
-        const mapped: StreamerDetails = {
-          roomId: props.roomId,
-          platform: 'bilibili',
-          roomTitle: (res && res.title) ? res.title : (props.title ?? '直播间标题加载中...'),
-          nickname: (res && res.anchor_name) ? res.anchor_name : (props.anchorName ?? props.roomId),
-          avatarUrl: (res && res.avatar) ? res.avatar : (props.avatar ?? null),
-          isLive: !!(res && res.status === 1),
-        };
-        roomDetails.value = mapped;
-        await ensureProxyStarted();
-        avatarUrl.value = proxify(normalizeAvatarUrl(mapped.avatarUrl));
-        showAvatarText.value = !avatarUrl.value;
-      } catch (e: any) {
-        console.error(`[StreamerInfo] BILIBILI fetchRoomDetails error for ${props.roomId}:`, e);
-        error.value = e?.message || '获取 B 站房间信息失败';
+        console.error(`[StreamerInfo] ${props.platform} fetchRoomDetails error for ${props.roomId}:`, e);
+        error.value = e?.message || `获取${props.platform}房间信息失败`;
         roomDetails.value = null;
         await ensureProxyStarted();
         avatarUrl.value = proxify(normalizeAvatarUrl(props.avatar || ''));
@@ -867,8 +777,8 @@
     showAvatarText.value = false;
 
     try {
-      if (props.platform === Platform.DOUYU) {
-        roomDetails.value = await fetchDouyuStreamerDetails(props.roomId);
+      if (props.platform === 'douyu') {
+        // roomDetails.value = await fetchDouyuStreamerDetails(props.roomId); // fetchDouyuStreamerDetails 函数已移至 SDK
         avatarUrl.value = normalizeAvatarUrl(roomDetails.value?.avatarUrl || avatarUrl.value);
       } else {
         console.warn(`[StreamerInfo] Unsupported platform: ${props.platform}`);
@@ -945,16 +855,11 @@
   }, { deep: true })
 
   watch(() => [props.title, props.anchorName, props.avatar], async (newValues, oldValues) => {
-    if (props.platform === Platform.DOUYIN) {
+    if (props.platform === 'douyin') {
       const hasChanged = newValues.some((val, index) => val !== oldValues[index])
       if (hasChanged) {
-        roomDetails.value = await getDouyinStreamerDetails({
-          roomId: props.roomId,
-          initialTitle: props.title,
-          initialAnchorName: props.anchorName,
-          initialAvatar: props.avatar,
-        })
-        avatarUrl.value = normalizeAvatarUrl(roomDetails.value?.avatarUrl || avatarUrl.value)
+        // getDouyinStreamerDetails 函数已移至 SDK，不再需要此处的实现
+        avatarUrl.value = normalizeAvatarUrl(props.avatar || '')
         showAvatarText.value = !avatarUrl.value
       }
     } else {

@@ -12,11 +12,11 @@ pub struct HuyaAnchorItem {
     pub title: String,
 }
 
-#[tauri::command]
 pub async fn search_huya_anchors(
-    keyword: String,
-    page: Option<usize>,
-) -> Result<Vec<HuyaAnchorItem>, String> {
+    keyword: &str,
+    page: Option<u32>,
+    page_size: Option<u32>
+) -> Result<(Vec<HuyaAnchorItem>, Option<serde_json::Value>), String> {
     let client = reqwest::Client::builder()
         .no_proxy()
         .build()
@@ -33,6 +33,7 @@ pub async fn search_huya_anchors(
     headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("zh-CN,zh;q=0.9"));
 
     let page_num = page.unwrap_or(1);
+    let rows = page_size.unwrap_or(20);
 
     let resp = client
         .get(url)
@@ -40,13 +41,13 @@ pub async fn search_huya_anchors(
         .query(&[
             ("m", "Search"),
             ("do", "getSearchContent"),
-            ("q", &keyword),
+            ("q", keyword),
             ("uid", "0"),
             ("v", "1"),
             ("typ", "-5"),
             ("livestate", "0"),
-            ("rows", "20"),
-            ("start", &((page_num - 1) * 20).to_string()),
+            ("rows", &rows.to_string()),
+            ("start", &((page_num - 1) * rows).to_string()),
         ])
         .send()
         .await
@@ -56,6 +57,7 @@ pub async fn search_huya_anchors(
 
     let text = resp.text().await.map_err(|e| e.to_string())?;
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let raw_data = Some(v.clone());
     let mut items = vec![];
     if let Some(list) = v
         .get("response")
@@ -93,5 +95,5 @@ pub async fn search_huya_anchors(
             items.push(anchor);
         }
     }
-    Ok(items)
+    Ok((items, raw_data))
 }

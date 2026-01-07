@@ -1,10 +1,22 @@
 use shared::http_client::HttpClient;
 use crate::a_bogus::generate_a_bogus;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT_ENCODING, COOKIE, REFERER, USER_AGENT};
+use crate::message::signature::generate_douyin_ms_token;
+use shared::interface::PlatformType;
+use shared::logger::Logger;
 use serde_json::Value;
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT_ENCODING, COOKIE, REFERER, USER_AGENT};
+
+// 创建静态日志记录器
+static LOGGER: std::sync::OnceLock<Logger> = std::sync::OnceLock::new();
+
+fn logger() -> &'static Logger {
+    LOGGER.get_or_init(|| {
+        Logger::new(Some(PlatformType::Douyin), "douyin::web_api")
+    })
+}
 
 // Use the tested cookie from douyin_rust sample to improve API success.
-const DEFAULT_COOKIE: &str =
+pub const DEFAULT_COOKIE: &str =
     "ttwid=1%7C2iDIYVmjzMcpZ20fcaFde0VghXAA3NaNXE_SLR68IyE%7C1761045455%7Cab35197d5cfb21df6cbb2fa7ef1c9262206b062c315b9d04da746d0b37dfbc7d";
 // Align UA with the working Douyin Rust sample to keep a_bogus inputs consistent.
 pub const DEFAULT_USER_AGENT: &str =
@@ -13,6 +25,7 @@ pub const DEFAULT_USER_AGENT: &str =
 #[derive(Debug, Clone)]
 pub struct DouyinRoomData {
     pub room: Value,
+    pub raw_response: Option<Value>,
 }
 
 // 直接从返回的 stream_data 中补全 ORIGIN，不依赖 HTML 解析，贴近 douyin_rust 实现。
@@ -117,6 +130,8 @@ async fn fetch_room_from_api(
     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
     headers.insert(COOKIE, HeaderValue::from_str(cookies.unwrap_or(DEFAULT_COOKIE)).map_err(|e| format!("Invalid cookie header value: {}", e))?);
 
+    // 生成抖音msToken
+    let ms_token = generate_douyin_ms_token();
     let params = vec![
         ("aid", "6383"),
         ("app_name", "douyin_web"),
@@ -128,7 +143,7 @@ async fn fetch_room_from_api(
         ("browser_name", "Chrome"),
         ("browser_version", "116.0.0.0"),
         ("web_rid", web_id),
-        ("msToken", ""),
+        ("msToken", &ms_token),
     ];
     let query = serde_urlencoded::to_string(&params)
         .map_err(|e| format!("Failed to encode Douyin enter params: {}", e))?;
@@ -138,39 +153,154 @@ async fn fetch_room_from_api(
         query,
         sign
     );
-    let json: Value = http_client
-        .inner
-        .get(&api)
-        .headers(headers)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to request Douyin web enter API: {}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse Douyin web enter response: {}", e))?;
-
-    let room = json
-        .get("data")
-        .and_then(|d| d.get("data"))
-        .and_then(|arr| arr.get(0))
-        .cloned()
-        .ok_or_else(|| "Douyin web enter API did not return room data".to_string())?;
-
-    let anchor_name = json
-        .get("data")
-        .and_then(|d| d.get("user"))
-        .and_then(|u| u.get("nickname"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let mut room_mut = room;
-    if let Some(name) = anchor_name {
-        if let Some(obj) = room_mut.as_object_mut() {
-            obj.insert("anchor_name".to_string(), Value::String(name));
+    
+    let params_value = serde_json::json!(params);
+    logger().log_request("fetch_room_from_api", &api, &Some(params_value));
+    logger().debug(format!("生成的a_bogus签名: {}", sign));
+    
+    // 重试机制：最多重试2次
+    let max_retries = 2;
+    for attempt in 1..=max_retries {
+        logger().debug(format!("第 {}/{} 次尝试请求抖音API", attempt, max_retries));
+        logger().debug(format!("请求头: {:?}", headers));
+        
+        // 使用直接的 http_client.inner 调用，与原始实现保持一致
+        match http_client.inner
+            .get(&api)
+            .headers(headers.clone())
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                logger().debug(format!("第 {}/{} 次尝试: 收到抖音API响应，状态码: {}", attempt, max_retries, resp.status()));
+                
+                // 检查响应状态码
+                if !resp.status().is_success() {
+                    logger().error(format!("第 {}/{} 次尝试: 抖音API返回错误状态码: {}", attempt, max_retries, resp.status()));
+                    
+                    // 如果不是最后一次尝试，等待1秒后重试
+                    if attempt < max_retries {
+                        logger().warn(format!("第 {}/{} 次尝试失败，1秒后重试", attempt, max_retries));
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    return Err(format!("Failed to fetch Douyin room data after {} attempts: API returned error status code {}", max_retries, resp.status()));
+                }
+                
+                // 先获取原始响应文本
+                let text = resp.text().await.map_err(|e| format!("Failed to read response text: {}", e))?;
+                
+                // 尝试解析JSON
+                match serde_json::from_str::<Value>(&text) {
+                    Ok(json) => {
+                        logger().debug(format!("第 {}/{} 次尝试: 成功解析抖音API响应JSON", attempt, max_retries));
+                        logger().log_structured(shared::logger::LogLevel::Debug, "抖音API响应", &json);
+                        
+                        // 检查响应结构是否符合预期
+                        let room = json
+                            .get("data")
+                            .and_then(|d| d.get("data"))
+                            .and_then(|arr| arr.get(0))
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                // 如果data.data为空，创建一个默认的room对象
+                                serde_json::json!({})
+                            });
+                            
+                        // 从data.user获取主播信息
+                        let user = json
+                            .get("data")
+                            .and_then(|d| d.get("user"))
+                            .cloned();
+                            
+                        // 提取主播名称
+                        let anchor_name = user
+                            .as_ref()
+                            .and_then(|u| u.get("nickname"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                // 备选方案：从原始json路径获取
+                                json
+                                    .get("data")
+                                    .and_then(|d| d.get("user"))
+                                    .and_then(|u| u.get("nickname"))
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                            });
+                            
+                        // 提取主播头像
+                        let avatar_url = user
+                            .as_ref()
+                            .and_then(|u| u.get("avatar_thumb"))
+                            .and_then(|thumb| thumb.get("url_list"))
+                            .and_then(|list| list.get(0))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        
+                        logger().debug(format!("解析到的直播间数据: {:?}", room));
+                        logger().debug(format!("解析到的主播名称: {:?}", anchor_name));
+                        logger().debug(format!("解析到的主播头像: {:?}", avatar_url));
+                        
+                        // 创建可修改的room对象
+                        let mut room_mut = room;
+                        
+                        // 将主播信息添加到room对象中
+                        if let Some(obj) = room_mut.as_object_mut() {
+                            // 添加主播名称
+                            if let Some(name) = anchor_name {
+                                obj.insert("anchor_name".to_string(), Value::String(name));
+                            }
+                            
+                            // 添加主播头像
+                            if let Some(url) = avatar_url {
+                                obj.insert("avatar_url".to_string(), Value::String(url));
+                            }
+                            
+                            // 添加用户信息
+                            if let Some(user_data) = user {
+                                obj.insert("user_info".to_string(), user_data);
+                            }
+                        }
+                        
+                        // 合并流信息
+                        merge_origin_stream(&mut room_mut);
+                        
+                        logger().debug(format!("处理后的直播间数据: {:?}", room_mut));
+                        logger().log_response_with_raw("fetch_room_from_api", &room_mut, &Some(json.clone()));
+                        
+                        // 无论room是否存在，只要有主播信息就返回成功
+                        return Ok(DouyinRoomData { room: room_mut, raw_response: Some(json) });
+                    },
+                    Err(e) => {
+                        logger().error(format!("第 {}/{} 次尝试: 抖音API响应JSON解析失败: {} - 原始响应文本: {}", attempt, max_retries, e, text));
+                        
+                        // 如果不是最后一次尝试，等待1秒后重试
+                        if attempt < max_retries {
+                            logger().warn(format!("第 {}/{} 次尝试失败，1秒后重试", attempt, max_retries));
+                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        } else {
+                            return Err(format!("Failed to fetch Douyin room data after {} attempts: JSON parse error: {} - Raw response: {}", max_retries, e, text));
+                        }
+                    }
+                }
+            },
+            Err(e) => {
+                logger().error(format!("第 {}/{} 次尝试: 抖音API网络请求失败: {}", attempt, max_retries, e));
+                
+                // 如果不是最后一次尝试，等待1秒后重试
+                if attempt < max_retries {
+                    logger().warn(format!("第 {}/{} 次尝试失败，1秒后重试", attempt, max_retries));
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                } else {
+                    return Err(format!("Failed to fetch Douyin room data after {} attempts: Network error: {}", max_retries, e));
+                }
+            }
         }
     }
-    merge_origin_stream(&mut room_mut);
-    Ok(DouyinRoomData { room: room_mut })
+    
+    // 所有尝试都失败了
+    Err(format!("Failed to fetch Douyin room data after {} attempts: API response structure is invalid", max_retries))
 }
 
 /// Normalize user input into a Douyin web_id. Supports raw IDs and full URLs such as
@@ -233,6 +363,7 @@ pub async fn fetch_room_data(
     cookies: Option<&str>,
 ) -> Result<DouyinRoomData, String> {
     let web_id = normalize_douyin_live_id(raw_id);
+    logger().debug(format!("归一化后的抖音直播ID: {}", web_id));
     // 简化逻辑：直接走网页版接口 + a_bogus，避免 HTML 解析失败。
     fetch_room_from_api(http_client, &web_id, cookies).await
 }

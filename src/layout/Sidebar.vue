@@ -259,10 +259,10 @@ html[data-theme="light"] .nav-item.is-active .nav-icon {
   background: rgba(255, 255, 255, 0.035);
 }
 
-:deep(.follow-list-component::-webkit-scrollbar) {
+::deep(.follow-list-component::-webkit-scrollbar) {
   width: 4px;
 }
-:deep(.follow-list-component::-webkit-scrollbar-thumb) {
+::deep(.follow-list-component::-webkit-scrollbar-thumb) {
   background: var(--glass-border);
   border-radius: 10px;
 }

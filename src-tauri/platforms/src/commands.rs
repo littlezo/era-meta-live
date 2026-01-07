@@ -1,5 +1,7 @@
 // This file exports all commands from the platforms package for use in the main application
+// Note: These direct platform imports are temporarily disabled in favor of the unified LivePlatform interface
 
+/*
 pub use super::bilibili::cookie::{bootstrap_bilibili_cookie, get_bilibili_cookie};
 pub use super::bilibili::message::{start_bilibili_message_listener, stop_bilibili_message_listener};
 pub use super::bilibili::live_list::fetch_bilibili_live_list;
@@ -22,3 +24,4 @@ pub use super::huya::message::{fetch_huya_join_params, start_huya_message_listen
 pub use super::huya::fetch_huya_live_list;
 pub use super::huya::search::search_huya_anchors;
 pub use super::huya::stream_url::get_huya_unified_cmd;
+*/

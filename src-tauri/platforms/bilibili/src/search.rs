@@ -137,25 +137,20 @@ async fn ensure_buvid(client: &reqwest::Client, cookie_header: &mut String) -> R
     Ok(())
 }
 
-#[tauri::command]
 pub async fn search_bilibili_rooms(
-    keyword: String,
+    client: &reqwest::Client,
+    keyword: &str,
     page: Option<u32>,
-    cookie: Option<String>,
-) -> Result<Vec<BilibiliSearchItem>, String> {
+    cookie: Option<&str>,
+) -> Result<(Vec<BilibiliSearchItem>, Option<Value>), String> {
     let trimmed = keyword.trim();
     if trimmed.is_empty() {
-        return Ok(vec![]);
+        return Ok((vec![], None));
     }
 
-    let mut cookie_header = cookie.unwrap_or_default();
+    let mut cookie_header = cookie.unwrap_or_default().to_string();
 
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .build()
-        .map_err(|e| format!("Failed to build client: {}", e))?;
-
-    let _ = ensure_buvid(&client, &mut cookie_header).await;
+    let _ = ensure_buvid(client, &mut cookie_header).await;
 
     let mut req = client
         .get(SEARCH_ENDPOINT)
@@ -255,5 +250,5 @@ pub async fn search_bilibili_rooms(
         }
     }
 
-    Ok(result)
+    Ok((result, Some(payload.clone())))
 }

@@ -1,19 +1,15 @@
 // 在开发模式下允许控制台窗口
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use reqwest;
-use std::collections::HashMap;
 use std::env;
-use std::sync::{Arc, Mutex};
-use tokio::sync::oneshot;
 use platforms;
+use platforms::shared::logger::init_logger;
 
 // Import the platform commands wrapper module
 mod platform_commands;
 mod proxy;
 mod watch;
 use platforms::shared::{DouyinMessageState, FollowHttpClient, HuyaMessageState, BilibiliMessageState};
-// use platforms::huya::get_huya_stream_url_with_quality; // removed in favor of unified cmd
 
 use tauri::Manager;
 
@@ -25,137 +21,15 @@ fn set_default_language() {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct StreamUrlStore {
-    pub url: Arc<Mutex<String>>,
-}
-
-// State for managing Douyu message listener handles (stop signals)
-#[derive(Default, Clone)]
-pub struct DouyuMessageHandles(Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>);
-
-#[tauri::command]
-async fn get_stream_url_cmd(room_id: String) -> Result<String, String> {
-    // Call the actual function to fetch the stream URL from the new location
-    platforms::douyu::get_stream_url(&room_id, None)
-        .await
-        .map_err(|e| {
-            eprintln!(
-                "[Rust Error] Failed to get stream URL for room {}: {}",
-                room_id,
-                e.to_string()
-            );
-            format!("Failed to get stream URL: {}", e.to_string())
-        })
-}
-
-#[tauri::command]
-async fn get_stream_url_with_quality_cmd(
-    room_id: String,
-    quality: String,
-    line: Option<String>,
-) -> Result<String, String> {
-    platforms::douyu::get_stream_url_with_quality(&room_id, &quality, line.as_deref())
-        .await
-        .map_err(|e| {
-            eprintln!(
-                "[Rust Error] Failed to get stream URL with quality {} for room {}: {}",
-                quality,
-                room_id,
-                e.to_string()
-            );
-            format!("Failed to get stream URL with quality: {}", e.to_string())
-        })
-}
-
-// Legacy Huya stream URL command removed in favor of unified command
-
-// This is the command that should be used for setting stream URL if it interacts with StreamUrlStore
-#[tauri::command]
-async fn set_stream_url_cmd(
-    url: String,
-    state: tauri::State<'_, StreamUrlStore>,
-) -> Result<(), String> {
-    let mut current_url = state.url.lock().unwrap();
-    *current_url = url;
-    Ok(())
-}
-
-// Command to start Douyu message listener
-#[tauri::command]
-async fn start_message_listener(
-    room_id: String,
-    window: tauri::Window,
-    message_handles: tauri::State<'_, DouyuMessageHandles>,
-) -> Result<(), String> {
-    // If a listener for this room_id already exists, stop it first.
-    if let Some(existing_sender) = message_handles.0.lock().unwrap().remove(&room_id) {
-        let _ = existing_sender.send(());
-    }
-
-    let (stop_tx, stop_rx) = oneshot::channel();
-    message_handles
-        .0
-        .lock()
-        .unwrap()
-        .insert(room_id.clone(), stop_tx);
-
-    let window_clone = window.clone();
-    let room_id_clone = room_id.clone();
-    tokio::spawn(async move {
-        let mut client = platforms::douyu::message_start::MessageClient::new(
-            &room_id_clone,
-            window_clone,
-            stop_rx, // Pass the receiver part of the oneshot channel
-        );
-        if let Err(e) = client.start().await {
-            eprintln!(
-                "[Rust Main] Douyu message client for room {} failed: {}",
-                room_id_clone, e
-            );
-        }
-    });
-
-    Ok(())
-}
-
-// Command to stop Douyu message listener
-#[tauri::command]
-async fn stop_message_listener(
-    room_id: String,
-    message_handles: tauri::State<'_, DouyuMessageHandles>,
-) -> Result<(), String> {
-    if let Some(sender) = message_handles.0.lock().unwrap().remove(&room_id) {
-        match sender.send(()) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(format!(
-                "Failed to stop Douyu message listener for room {}: receiver dropped.",
-                room_id
-            )),
-        }
-    } else {
-        Ok(())
-    }
-}
-
-// search_anchor seems fine, assuming douyu::search_anchor is correct
-#[tauri::command]
-async fn search_anchor(keyword: String) -> Result<String, String> {
-    platforms::douyu::perform_anchor_search(&keyword)
-        .await
-        .map_err(|e| e.to_string())
-}
 
 // Main function corrected
 fn main() {
     // 设置默认语言
     set_default_language();
-    // Create a new HTTP client instance to be managed by Tauri
-    let client = reqwest::Client::builder()
-        // .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-        .no_proxy()
-        .build()
-        .expect("Failed to create reqwest client");
+    
+    // 初始化日志系统
+    init_logger().expect("Failed to initialize logger");
+    
     let follow_http_client = FollowHttpClient::new().expect("Failed to create follow http client");
 
     // 创建菜单的代码将在 setup 函数中处理，因为需要 app 实例
@@ -193,31 +67,21 @@ fn main() {
             }
             Ok(())
         })
-        .manage(client) // Manage the reqwest client
         .manage(follow_http_client) // 专用关注刷新客户端，避免占用默认连接池
-        .manage(DouyuMessageHandles::default()) // Manage new DouyuMessageHandles
         .manage(DouyinMessageState::default()) // Manage DouyinMessageState
         .manage(HuyaMessageState::default()) // Manage HuyaMessageState
         .manage(BilibiliMessageState::default()) // Manage BilibiliMessageState
-        .manage(StreamUrlStore::default())
         .manage(proxy::ProxyServerHandle::default())
-        .manage(platforms::bilibili::state::BilibiliState::default())
-        .manage(watch::FollowWatchState::default())
         .invoke_handler(tauri::generate_handler![
-            // Douyu legacy commands
-            get_stream_url_cmd,
-            get_stream_url_with_quality_cmd,
-            set_stream_url_cmd,
-            search_anchor,
-            start_message_listener,      // Douyu message start
-            stop_message_listener,       // Douyu message stop
-            
-            // Platform commands (wrapped from platforms crate)
-            // Only include commands that are actually used by the frontend
-            // Douyin commands - these are the ones causing errors in the frontend
-            platform_commands::fetch_douyin_streamer_info,
-            platform_commands::get_douyin_live_stream_url_with_quality,
-            platform_commands::start_douyin_message_listener,
+            // Unified platform commands (preferred)
+            platform_commands::fetch_live_list,
+            platform_commands::fetch_room_info,
+            platform_commands::get_stream_url,
+            platform_commands::fetch_streamer_info,
+            platform_commands::search_rooms,
+            platform_commands::fetch_categories,
+            platform_commands::get_message_listener_status,  // Unified message status query
+            platform_commands::send_follow_list,  // Follow list management
             
             // Proxy commands
             proxy::start_proxy,

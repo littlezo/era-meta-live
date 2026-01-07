@@ -1,7 +1,18 @@
 use serde::{Deserialize, Serialize};
-use tauri::command;
+use std::sync::Arc;
 
+use shared::interface::{LiveListParams, LiveList, RoomInfo, PlatformType};
 use shared::http_client::HttpClient;
+use shared::logger::Logger;
+
+// 创建静态日志记录器
+static LOGGER: std::sync::OnceLock<Logger> = std::sync::OnceLock::new();
+
+fn logger() -> &'static Logger {
+    LOGGER.get_or_init(|| {
+        Logger::new(Some(PlatformType::Huya), "huya::live_list")
+    })
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HuyaStreamerFrontend {
@@ -74,12 +85,14 @@ fn map_huya_item_to_frontend(item: &serde_json::Value) -> Option<HuyaStreamerFro
     })
 }
 
-#[command]
 pub async fn fetch_huya_live_list(
-    i_gid: String,
-    i_page_no: u32,
-    i_page_size: u32,
-) -> HuyaLiveListFrontendResponse {
+    client: Arc<HttpClient>,
+    params: LiveListParams
+) -> Result<(LiveList, Option<serde_json::Value>), String> {
+    let i_gid = params.category_id.unwrap_or_else(|| "0".to_string());
+    let i_page_no = params.page.unwrap_or(1);
+    let i_page_size = params.page_size.unwrap_or(20);
+    
     let url = format!(
         "https://live.huya.com/liveHttpUI/getLiveList?iGid={}&iPageNo={}&iPageSize={}",
         urlencoding::encode(&i_gid),
@@ -87,30 +100,16 @@ pub async fn fetch_huya_live_list(
         i_page_size
     );
 
-    let client = match HttpClient::new_direct_connection() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("[Huya Backend] Failed to init HTTP client: {}", e);
-            return HuyaLiveListFrontendResponse {
-                error: 500,
-                msg: Some(e),
-                data: None,
-            };
-        }
-    };
-
-    // 修复：get_json 是异步方法，需要 .await；并直接匹配 Result 而不是对 Result 使用 .await
-    let resp_value: serde_json::Value = match client.get_json::<serde_json::Value>(&url).await {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("[Huya Backend] Request failed: {}", e);
-            return HuyaLiveListFrontendResponse {
-                error: 500,
-                msg: Some(e),
-                data: None,
-            };
-        }
-    };
+    let resp_value: serde_json::Value = client
+        .get_json(&url)
+        .await
+        .map_err(|e| {
+            logger().error(format!("Request failed: {}", e));
+            format!("Request failed: {}", e)
+        })?;
+    
+    // 保存原始响应数据
+    let raw_data = Some(resp_value.clone());
 
     // 兼容两种可能的返回结构：顶层 vList 或 data.vList
     let v_list_opt = resp_value
@@ -126,20 +125,63 @@ pub async fn fetch_huya_live_list(
         });
 
     if let Some(arr) = v_list_opt {
-        let mapped: Vec<HuyaStreamerFrontend> = arr
+        let items: Vec<RoomInfo> = arr
             .iter()
             .filter_map(|item| map_huya_item_to_frontend(item))
+            .map(|streamer| {
+                let room_id_clone = streamer.room_id.clone();
+                let i_gid_clone = i_gid.clone();
+                // 将streamer转换为JSON以便作为raw数据
+                let streamer_json = serde_json::json!(
+                    {
+                        "room_id": streamer.room_id,
+                        "title": streamer.title,
+                        "nickname": streamer.nickname,
+                        "avatar": streamer.avatar,
+                        "room_cover": streamer.room_cover,
+                        "viewer_count_str": streamer.viewer_count_str,
+                        "i_gid": i_gid_clone
+                    }
+                );
+                RoomInfo {
+                    room_id: streamer.room_id,
+                    title: streamer.title,
+                    streamer_name: streamer.nickname,
+                    streamer_id: room_id_clone, // 使用room_id作为streamer_id，实际应该有专门的主播ID
+                    avatar_url: Some(streamer.avatar),
+                    cover_url: Some(streamer.room_cover),
+                    live_status: true, // 直播列表中的主播应该都是在线的
+                    live_status_detail: "LIVE".to_string(),
+                    viewer_count: Some(
+                        streamer.viewer_count_str.replace("万", "0000")
+                            .parse::<u64>()
+                            .unwrap_or(0)
+                    ),
+                    viewer_count_str: Some(streamer.viewer_count_str),
+                    category_name: None,
+                    category_id: Some(i_gid_clone),
+                    tags: None,
+                    other: None,
+                    raw: Some(streamer_json),
+                }
+            })
             .collect();
-        HuyaLiveListFrontendResponse {
-            error: 0,
-            msg: Some("Success".to_string()),
-            data: Some(mapped),
-        }
+        
+        // Calculate has_more before moving items
+        let has_more = items.len() >= i_page_size as usize;
+        let live_list = LiveList {
+            items,
+            total: None,
+            page: Some(i_page_no),
+            page_size: Some(i_page_size),
+            has_more,
+            other: None,
+            raw: raw_data.clone(),
+        };
+        
+        // 返回原始API数据
+        Ok((live_list, raw_data))
     } else {
-        HuyaLiveListFrontendResponse {
-            error: -1,
-            msg: Some("No vList in response".to_string()),
-            data: None,
-        }
+        Err("No vList in response".to_string())
     }
 }
